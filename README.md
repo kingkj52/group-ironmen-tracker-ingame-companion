@@ -15,7 +15,7 @@ back to collecting that data itself when that plugin is not running.
 
 Every feature below can be switched off on its own in the plugin settings.
 
-**Group bank** — a read-only, searchable window showing everything the group owns.
+**Group bank** - a read-only, searchable window showing everything the group owns.
 `Ctrl+G` by default, or click the small **Group** tab that appears beside your bank.
 
 The first time you open it, it places itself to the left of the bank, or against the left
@@ -32,12 +32,12 @@ It only swallows clicks inside its own frame, so your own bank stays fully usabl
 - Click the search box and type to filter. `Esc` clears, then closes.
 - Alt-drag to move it, like any RuneLite overlay.
 
-**Group levels on the Skills tab** — hover any skill and a panel lists every member's level,
+**Group levels on the Skills tab** - hover any skill and a panel lists every member's level,
 experience and experience to the next level, each in that member's colour. The panel is
 anchored beside the Skills tab rather than following the mouse, so it never covers the game's
 own experience tooltip and never runs off the edge of the screen. Its side is configurable.
 
-**World map markers** — a coloured pin per member on the world map. When a member is off the
+**World map markers** - a coloured pin per member on the world map. When a member is off the
 overworld, a second hollow marker with a downward chevron is drawn at the surface entrance
 that leads to them, so you can find them without knowing where they went. Their real marker
 still appears when you pan the map to that dungeon's own view, because RuneLite only draws a
@@ -51,21 +51,21 @@ them, or right-click to route to them with the Shortest Path plugin. The route f
 they move and clears once you reach them. Shortest Path is optional; without it, right-click
 simply does nothing.
 
-Entrances cover every area the game defines a map for — around 40, including the ones that
+Entrances cover every area the game defines a map for - around 40, including the ones that
 are not simply "the surface plus 6400", such as Zanaris, God Wars Dungeon, Mor Ul Rek and the
 Stronghold of Security. The data is generated from the game cache rather than measured by
 hand; see [tools/mapdump](tools/mapdump/README.md).
 
-**Side panel** — five tabs:
+**Side panel** - five tabs:
 
-- **Group** — each member's hitpoints, prayer, run energy, world and last-seen time.
-- **Items** — search everything the group owns and see who is holding it.
-- **Skills** — total level and experience, or one skill compared across the group.
-- **Quests** — completion per member, plus a search showing where everyone stands on a quest.
-- **Diaries** — achievement diary completion per member, overall or broken down by region
+- **Group** - each member's hitpoints, prayer, run energy, world and last-seen time.
+- **Items** - search everything the group owns and see who is holding it.
+- **Skills** - total level and experience, or one skill compared across the group.
+- **Quests** - completion per member, plus a search showing where everyone stands on a quest.
+- **Diaries** - achievement diary completion per member, overall or broken down by region
   and tier.
 
-**Status overlay** (off by default) — the same vitals as a compact in-game overlay.
+**Status overlay** (off by default) - the same vitals as a compact in-game overlay.
 
 ## Setup
 
@@ -74,12 +74,12 @@ hand; see [tools/mapdump](tools/mapdump/README.md).
 2. Put them in this plugin's **Connection** settings.
 
 If you already run the official Group Ironmen Tracker plugin, you can leave all three fields
-blank — this plugin reads the group name, token and self-hosted server URL from that plugin's
+blank - this plugin reads the group name, token and self-hosted server URL from that plugin's
 configuration.
 
 This works whether your group uses the public groupiron.men site or self-hosts: the plugin
 reads the same API the website reads, with the same credentials. A group where everyone runs
-only the official tracker plugin needs no extra setup at all — install this alongside it and
+only the official tracker plugin needs no extra setup at all - install this alongside it and
 the in-game views populate from what the tracker is already uploading.
 
 ### Sharing your own data
@@ -119,7 +119,7 @@ bar, so this plugin is built to stay clearly inside
   actual prohibition on menus. Everything clickable belongs to the plugin's own overlays.
 - **No interface modification.** No game widget is created, hidden, unhidden, reparented,
   moved or resized, and no click zone is changed. Game widgets are read for their on-screen
-  bounds only — to know which skill the mouse is over, and where the bank window sits so the
+  bounds only - to know which skill the mouse is over, and where the bank window sits so the
   Group tab can be drawn *outside* it. Every view is the plugin's own drawing.
 - **Read-only by construction.** The plugin only ever holds item ids and quantities read back
   from your group's server. There is no code path that could withdraw, deposit or use
@@ -139,7 +139,7 @@ none of them can regress quietly.
 
 ## Security
 
-- The only host the plugin contacts is the base URL you configured — `groupiron.men` by
+- The only host the plugin contacts is the base URL you configured - `groupiron.men` by
   default, or your own server.
 - Requests carry your group token, so redirects are disabled: a redirect could otherwise hand
   that token to a host you never configured.
@@ -164,8 +164,8 @@ builds of this plugin first.
 and covers every world map the game defines. Regenerate it after a game update; `MapAreasTest`
 asserts that a spread of known dungeons still resolve to the right entrances.
 
-Where the cache defines no route to the surface — the Abyss, Tutorial Island, a couple of
-Prifddinas interiors — a member still gets their true-position marker and the area's real
+Where the cache defines no route to the surface - the Abyss, Tutorial Island, a couple of
+Prifddinas interiors - a member still gets their true-position marker and the area's real
 name in the tooltip, just no entrance marker.
 
 ## Not implemented

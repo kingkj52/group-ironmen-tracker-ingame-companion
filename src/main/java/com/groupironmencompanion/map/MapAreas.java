@@ -41,10 +41,22 @@ public final class MapAreas
 	/** How near a link outside every known area has to be before it is trusted, in tiles. */
 	private static final int LOOSE_LINK_RADIUS = 64;
 
+	/**
+	 * How far a projected position may be from a real entrance and still snap to it.
+	 * <p>
+	 * Deliberately tight. A generous radius mislabels: the Barrows tunnels project to within
+	 * 85 tiles of the Shade Catacombs entrance, which is a different dungeon entirely. Keeping
+	 * this small means an unrecognised area falls back to the bare projection rather than
+	 * confidently pointing at the wrong door. Holding the marker still as a member walks
+	 * around underground is {@code GroupMapMarkers}' job, not this one's.
+	 */
+	private static final int ENTRANCE_SNAP_RADIUS = 64;
+
 	private static volatile MapAreas instance;
 
 	private final Map<Integer, Area> bySquare;
 	private final Link[] looseLinks;
+	private final Entrance[] entrances;
 
 	private MapAreas(Resource resource)
 	{
@@ -64,6 +76,7 @@ public final class MapAreas
 			}
 		}
 		looseLinks = resource.looseLinks == null ? new Link[0] : resource.looseLinks;
+		entrances = resource.entrances == null ? new Entrance[0] : resource.entrances;
 	}
 
 	public static MapAreas get(Gson gson)
@@ -147,16 +160,49 @@ public final class MapAreas
 			return new Located(areaName, new WorldPoint(loose.ex, loose.ey, 0), loose.name);
 		}
 
-		// 3. Project straight up out of the underground band. Accurate to a few tiles,
-		// because these areas are built directly below where they connect to.
+		// 3. Project straight up out of the underground band, then snap to the nearest real
+		// entrance. Areas in this band sit directly below the surface they belong to, so the
+		// projection lands near the right doorway, but on its own it would track the member's
+		// every step. Snapping anchors the marker to the entrance nearest them instead.
 		if (point.getY() >= UNDERGROUND_Y)
 		{
-			return new Located(areaName,
-				new WorldPoint(point.getX(), point.getY() - UNDERGROUND_Y, 0), null);
+			WorldPoint projected = new WorldPoint(point.getX(), point.getY() - UNDERGROUND_Y, 0);
+
+			Entrance snapped = nearestEntrance(projected);
+			if (snapped != null)
+			{
+				return new Located(areaName, new WorldPoint(snapped.x, snapped.y, 0), snapped.name);
+			}
+
+			// Nothing known nearby; the bare projection still beats no marker at all.
+			return new Located(areaName, projected, null);
 		}
 
 		// Known area, no way to place it on the surface. The name alone is still worth having.
 		return new Located(areaName, null, null);
+	}
+
+	/** The curated surface entrance nearest a point, within the snap radius. */
+	@Nullable
+	private Entrance nearestEntrance(WorldPoint point)
+	{
+		Entrance best = null;
+		long bestDistance = Long.MAX_VALUE;
+		long limit = (long) ENTRANCE_SNAP_RADIUS * ENTRANCE_SNAP_RADIUS;
+
+		for (Entrance entrance : entrances)
+		{
+			long dx = entrance.x - point.getX();
+			long dy = entrance.y - point.getY();
+			long distance = dx * dx + dy * dy;
+			if (distance < bestDistance)
+			{
+				bestDistance = distance;
+				best = entrance;
+			}
+		}
+
+		return bestDistance <= limit ? best : null;
 	}
 
 	@Nullable
@@ -239,6 +285,15 @@ public final class MapAreas
 	{
 		private Area[] areas;
 		private Link[] looseLinks;
+		private Entrance[] entrances;
+	}
+
+	/** A named surface entrance, from RuneLite's curated dungeon entrance list. */
+	private static final class Entrance
+	{
+		private int x;
+		private int y;
+		private String name;
 	}
 
 	private static final class Area

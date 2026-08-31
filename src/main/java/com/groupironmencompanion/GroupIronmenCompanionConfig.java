@@ -359,6 +359,33 @@ public interface GroupIronmenCompanionConfig extends Config
 	}
 
 	@ConfigItem(
+		keyName = "mapPanel",
+		name = "Member list on the world map",
+		description = "While the world map is open, draw a small list of online members. Click a "
+			+ "name to jump the map to them.",
+		position = 3,
+		section = mapSection
+	)
+	default boolean mapPanel()
+	{
+		return true;
+	}
+
+	@ConfigItem(
+		keyName = "mapPanelRouting",
+		name = "Right-click a member to route to them",
+		description = "Right-clicking a name in that list asks the Shortest Path plugin to route to "
+			+ "that member, following them as they move and clearing once you reach them. Requires "
+			+ "the Shortest Path plugin; without it this does nothing.",
+		position = 4,
+		section = mapSection
+	)
+	default boolean mapPanelRouting()
+	{
+		return true;
+	}
+
+	@ConfigItem(
 		keyName = "worldMapOffline",
 		name = "Include offline members",
 		description = "Keep showing the last known position of members who have gone offline.",

@@ -1,5 +1,5 @@
 """
-Builds map-areas.json, the resource shipped with the Group Ironmen Tracker In-Game Companion plugin.
+Builds map-areas.json, the resource shipped with the Group Ironmen In-Game plugin.
 
 Inputs (both generated, nothing hand-written):
   areas.json           - every world map the game defines, with the real world squares it
@@ -148,8 +148,14 @@ def main():
         if not area["exits"]:
             print("  no entrance: %s" % area["name"])
 
+    # Every curated surface entrance, so a member in an area the cache does not describe
+    # can still be snapped to a real entrance instead of a drifting projection.
+    entrances = [{"x": n["x"], "y": n["y"], "name": n["name"]} for n in names]
+    print("curated surface entrances: %d" % len(entrances))
+
     with open("map-areas.json", "w", encoding="utf-8") as out:
-        json.dump({"areas": out_areas, "looseLinks": loose}, out, separators=(",", ":"))
+        json.dump({"areas": out_areas, "looseLinks": loose, "entrances": entrances},
+                  out, separators=(",", ":"))
     print()
     print("wrote map-areas.json")
 

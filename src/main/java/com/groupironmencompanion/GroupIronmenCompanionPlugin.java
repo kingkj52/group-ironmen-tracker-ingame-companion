@@ -8,9 +8,12 @@ import com.groupironmencompanion.bank.GroupBankOverlay;
 import com.groupironmencompanion.bank.GroupBankTabOverlay;
 import com.groupironmencompanion.bank.GroupBankViewer;
 import com.groupironmencompanion.data.GroupState;
+import com.groupironmencompanion.map.GroupMapInput;
 import com.groupironmencompanion.map.GroupMapMarkers;
+import com.groupironmencompanion.map.GroupMapOverlay;
 import com.groupironmencompanion.overlay.GroupStatusOverlay;
 import com.groupironmencompanion.overlay.SkillHoverOverlay;
+import com.groupironmencompanion.route.RouteTracker;
 import com.groupironmencompanion.ui.GroupPanel;
 import com.groupironmencompanion.upload.GroupUploader;
 import java.awt.Color;
@@ -116,6 +119,15 @@ public class GroupIronmenCompanionPlugin extends Plugin
 	private GroupMapMarkers mapMarkers;
 
 	@Inject
+	private GroupMapOverlay mapOverlay;
+
+	@Inject
+	private GroupMapInput mapInput;
+
+	@Inject
+	private RouteTracker routeTracker;
+
+	@Inject
 	private GroupBankViewer bankViewer;
 
 	@Inject
@@ -189,11 +201,13 @@ public class GroupIronmenCompanionPlugin extends Plugin
 		overlayManager.add(bankTabOverlay);
 		overlayManager.add(skillHoverOverlay);
 		overlayManager.add(statusOverlay);
+		overlayManager.add(mapOverlay);
 
 		keyManager.registerKeyListener(bankHotkey);
 		keyManager.registerKeyListener(bankInput);
 		mouseManager.registerMouseListener(bankInput);
 		mouseManager.registerMouseWheelListener(bankInput);
+		mouseManager.registerMouseListener(mapInput);
 
 		if (config.showSidePanel())
 		{
@@ -230,16 +244,19 @@ public class GroupIronmenCompanionPlugin extends Plugin
 		overlayManager.remove(bankTabOverlay);
 		overlayManager.remove(skillHoverOverlay);
 		overlayManager.remove(statusOverlay);
+		overlayManager.remove(mapOverlay);
 
 		keyManager.unregisterKeyListener(bankHotkey);
 		keyManager.unregisterKeyListener(bankInput);
 		mouseManager.unregisterMouseListener(bankInput);
 		mouseManager.unregisterMouseWheelListener(bankInput);
+		mouseManager.unregisterMouseListener(mapInput);
 
 		removeSidePanel();
 
 		bankViewer.reset();
 		uploader.reset();
+		routeTracker.stop();
 		clientThread.invoke(mapMarkers::clear);
 		groupState.reset();
 	}
@@ -369,6 +386,12 @@ public class GroupIronmenCompanionPlugin extends Plugin
 			varsChanged = false;
 			uploader.onQuestsChanged();
 			uploader.onDiaryChanged();
+		}
+
+		// Follows the routed member as they move, and ends the route once we reach them.
+		if (config.mapPanelRouting())
+		{
+			routeTracker.update();
 		}
 
 		// Markers are rebuilt immediately whenever group data changes. This periodic pass

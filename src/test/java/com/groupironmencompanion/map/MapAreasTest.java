@@ -88,6 +88,37 @@ public class MapAreasTest
 	}
 
 	@Test
+	public void snapsAnUnmappedDungeonToARealEntrance()
+	{
+		// Varlamore's Hunter Guild caverns are in no area the game cache describes, so this
+		// goes down the projection path. It must land on the guild's own entrance, and stay
+		// on it as the member walks about, rather than sliding across the overworld with them.
+		MapAreas.Located inside = areas.locate(at(1560, 9460));
+		assertNotNull(inside);
+		assertNotNull(inside.getEntrance());
+		assertEquals("Hunter Guild Caverns", inside.getEntranceName());
+
+		MapAreas.Located twentyNorth = areas.locate(at(1560, 9480));
+		assertNotNull(twentyNorth.getEntrance());
+		assertEquals("the entrance must not move with the member",
+			inside.getEntrance().getX(), twentyNorth.getEntrance().getX());
+		assertEquals("the entrance must not move with the member",
+			inside.getEntrance().getY(), twentyNorth.getEntrance().getY());
+	}
+
+	@Test
+	public void doesNotSnapToAConfidentlyWrongEntrance()
+	{
+		// The Barrows tunnels project to within 85 tiles of the Shade Catacombs entrance,
+		// which is a different dungeon. Better to fall back to the bare projection than to
+		// point confidently at the wrong door.
+		MapAreas.Located located = areas.locate(at(3565, 9695));
+		assertNotNull(located);
+		assertNotNull(located.getEntrance());
+		assertNull("must not borrow a neighbouring dungeon's name", located.getEntranceName());
+	}
+
+	@Test
 	public void namesTheAreaEvenWhenItIsNotADungeon()
 	{
 		MapAreas.Located located = areas.locate(at(2884, 9813));

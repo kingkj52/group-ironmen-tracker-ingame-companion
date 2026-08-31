@@ -43,6 +43,14 @@ that leads to them, so you can find them without knowing where they went. Their 
 still appears when you pan the map to that dungeon's own view, because RuneLite only draws a
 world map point on the map that actually covers it.
 
+While a member is somewhere the map cannot draw, their surface marker stays parked on one
+entrance rather than sliding around as they walk about underground.
+
+Opening the world map also shows a small list of online members: click one to jump the map to
+them, or right-click to route to them with the Shortest Path plugin. The route follows them as
+they move and clears once you reach them. Shortest Path is optional; without it, right-click
+simply does nothing.
+
 Entrances cover every area the game defines a map for — around 40, including the ones that
 are not simply "the surface plus 6400", such as Zanaris, God Wars Dungeon, Mor Ul Rek and the
 Stronghold of Security. The data is generated from the game cache rather than measured by
@@ -94,7 +102,7 @@ have anything to show.
 | Side panel | Enable, show activity, show offline members, include yourself |
 | Group bank | Enable, hotkey, bank tab, open/close with the bank, item values |
 | Skills tab | Enable hover, panel position, include yourself, include offline members |
-| World map | Enable markers, dungeon entrance markers, include offline members |
+| World map | Enable markers, dungeon entrance markers, include offline members, member list, routing |
 | Status overlay | Enable, vitals, activity, offline members, include yourself |
 | Member colours | One colour per member, assigned alphabetically |
 | Data sharing | Whether to upload your own data when the tracker plugin is absent |

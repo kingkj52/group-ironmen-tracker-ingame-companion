@@ -150,7 +150,7 @@ public class ComplianceTest
 		for (Path path : sources())
 		{
 			String name = path.toString().replace('\\', '/');
-			boolean awtFacing = name.contains("/ui/") || name.endsWith("GroupBankInput.java");
+			boolean awtFacing = name.contains("/ui/") || name.endsWith("Input.java");
 			if (!awtFacing)
 			{
 				continue;

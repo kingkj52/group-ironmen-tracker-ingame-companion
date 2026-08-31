@@ -7,6 +7,7 @@ import java.awt.Color;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import javax.annotation.Nullable;
 import javax.inject.Inject;
 import javax.inject.Singleton;
 import net.runelite.api.coords.WorldPoint;
@@ -44,6 +45,17 @@ public class GroupMapMarkers
 	/** Colour each marker image was drawn with, so images are only redrawn when needed. */
 	private final Map<String, Color> markerColours = new HashMap<>();
 
+	/**
+	 * The entrance last chosen for each member, and where they were when it was chosen.
+	 * <p>
+	 * Without this the surface marker moves with them: for an area the game cache does not
+	 * describe, the entrance is derived from their position, so walking around underground
+	 * slides the overworld marker about and can even flip it to a neighbouring dungeon's
+	 * door. Holding the choice still until they genuinely leave the area keeps the marker
+	 * parked on one entrance, which is the whole point of drawing it.
+	 */
+	private final Map<String, StickyEntrance> stickyEntrances = new HashMap<>();
+
 	public void clear()
 	{
 		for (WorldMapPoint point : positionMarkers.values())
@@ -57,6 +69,7 @@ public class GroupMapMarkers
 		positionMarkers.clear();
 		entranceMarkers.clear();
 		markerColours.clear();
+		stickyEntrances.clear();
 	}
 
 	/** Rebuilds the markers from the current group state. Call on the client thread. */
@@ -111,7 +124,7 @@ public class GroupMapMarkers
 			marker.setTooltip(describe(member, position));
 			keptPositions.put(name, marker);
 
-			MapAreas.Located located = config.worldMapEntrances() ? mapAreas().locate(position) : null;
+			MapAreas.Located located = config.worldMapEntrances() ? stickyLocate(name, position) : null;
 
 			if (located != null && located.getEntrance() != null)
 			{
@@ -153,6 +166,47 @@ public class GroupMapMarkers
 	private MapAreas mapAreas()
 	{
 		return MapAreas.get(gson);
+	}
+
+	/** How far a member may move underground before their entrance is reconsidered. */
+	private static final int STICKY_RADIUS = 192;
+
+	/**
+	 * Resolves a member's entrance, reusing the one already chosen while they stay in the
+	 * same part of the world.
+	 */
+	@Nullable
+	private MapAreas.Located stickyLocate(String name, WorldPoint position)
+	{
+		MapAreas.Located located = mapAreas().locate(position);
+		if (located == null || located.getEntrance() == null)
+		{
+			// Back on the surface, or nowhere we can place: drop any remembered choice.
+			stickyEntrances.remove(name);
+			return located;
+		}
+
+		StickyEntrance sticky = stickyEntrances.get(name);
+		if (sticky != null && sticky.anchor.distanceTo2D(position) <= STICKY_RADIUS)
+		{
+			return sticky.located;
+		}
+
+		stickyEntrances.put(name, new StickyEntrance(located, position));
+		return located;
+	}
+
+	/** A remembered entrance choice, and the position that produced it. */
+	private static final class StickyEntrance
+	{
+		private final MapAreas.Located located;
+		private final WorldPoint anchor;
+
+		StickyEntrance(MapAreas.Located located, WorldPoint anchor)
+		{
+			this.located = located;
+			this.anchor = anchor;
+		}
 	}
 
 	private String describe(GroupMember member, WorldPoint position)

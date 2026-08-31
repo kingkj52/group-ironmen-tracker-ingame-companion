@@ -1,0 +1,26 @@
+plugins {
+	id 'java'
+	id 'application'
+}
+
+repositories {
+	maven {
+		url = 'https://repo.runelite.net'
+	}
+	mavenCentral()
+}
+
+dependencies {
+	implementation group: 'net.runelite', name: 'cache', version: 'latest.release'
+	implementation 'com.google.code.gson:gson:2.10.1'
+	implementation 'org.slf4j:slf4j-simple:1.7.36'
+}
+
+application {
+	mainClass = 'AreaDump'
+}
+
+tasks.withType(JavaCompile).configureEach {
+	options.encoding = 'UTF-8'
+	options.release.set(11)
+}

@@ -72,7 +72,7 @@ public class GroupMapInput extends MouseAdapter
 				return;
 			}
 
-			overlay.jumpTo(member.getWorldPoint());
+			overlay.jumpTo(member);
 		});
 
 		event.consume();

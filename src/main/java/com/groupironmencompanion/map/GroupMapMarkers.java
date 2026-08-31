@@ -172,6 +172,27 @@ public class GroupMapMarkers
 	private static final int STICKY_RADIUS = 192;
 
 	/**
+	 * The surface entrance currently drawn for a member, or null when they are on the
+	 * overworld or nothing leads to where they are. Jumping to a member uses this so the map
+	 * lands on the same pin it is showing.
+	 * <p>
+	 * Prefers the remembered choice so the jump agrees with the drawn marker exactly, and
+	 * resolves fresh when entrance markers are switched off and nothing was remembered.
+	 */
+	@Nullable
+	public WorldPoint getDrawnEntrance(String memberName, WorldPoint position)
+	{
+		StickyEntrance sticky = stickyEntrances.get(memberName);
+		if (sticky != null)
+		{
+			return sticky.located.getEntrance();
+		}
+
+		MapAreas.Located located = mapAreas().locate(position);
+		return located == null ? null : located.getEntrance();
+	}
+
+	/**
 	 * Resolves a member's entrance, reusing the one already chosen while they stay in the
 	 * same part of the world.
 	 */

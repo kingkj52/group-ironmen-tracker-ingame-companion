@@ -21,6 +21,8 @@ import net.runelite.api.Client;
 import net.runelite.api.Point;
 import net.runelite.api.coords.WorldPoint;
 import net.runelite.api.gameval.InterfaceID;
+import net.runelite.api.worldmap.WorldMap;
+import net.runelite.api.worldmap.WorldMapData;
 import net.runelite.api.widgets.Widget;
 import net.runelite.client.ui.overlay.Overlay;
 import net.runelite.client.ui.overlay.OverlayLayer;
@@ -64,6 +66,9 @@ public class GroupMapOverlay extends Overlay
 
 	@Inject
 	private RouteTracker routeTracker;
+
+	@Inject
+	private GroupMapMarkers markers;
 
 	/** Rows of the last drawn frame, published for the AWT-side input handler. */
 	private volatile List<Row> rows = Collections.emptyList();
@@ -171,13 +176,40 @@ public class GroupMapOverlay extends Overlay
 		return null;
 	}
 
-	/** Centres the world map on a point. Client thread only. */
-	void jumpTo(WorldPoint point)
+	/**
+	 * Centres the world map on a member. Client thread only.
+	 * <p>
+	 * A member in a dungeon has world coordinates that are not on the overworld map, so
+	 * targeting them directly does nothing at all: there is nowhere on the displayed map to
+	 * go. When that is the case the map jumps to the surface entrance instead, which is where
+	 * their pin actually is from this view. Navigate into the dungeon's own map and the same
+	 * click then goes to their true position, because the displayed map now covers it.
+	 */
+	void jumpTo(GroupMember member)
 	{
-		if (point != null)
+		WorldPoint target = member == null ? null : member.getWorldPoint();
+		if (target == null)
 		{
-			client.getWorldMap().setWorldMapPositionTarget(point);
+			return;
 		}
+
+		WorldMap worldMap = client.getWorldMap();
+		if (worldMap == null)
+		{
+			return;
+		}
+
+		WorldMapData data = worldMap.getWorldMapData();
+		if (data != null && !data.surfaceContainsPosition(target.getX(), target.getY()))
+		{
+			WorldPoint entrance = markers.getDrawnEntrance(member.getName(), target);
+			if (entrance != null)
+			{
+				target = entrance;
+			}
+		}
+
+		worldMap.setWorldMapPositionTarget(target);
 	}
 
 	/** The member whose row contains this canvas point, or null. */

@@ -1,0 +1,26 @@
+# Gradle
+build/
+.gradle/
+tools/mapdump/build/
+tools/mapdump/.gradle/
+
+# Intermediate output from the map data extractor; only the generated resource is checked in
+tools/mapdump/areas.json
+tools/mapdump/links.json
+tools/mapdump/maps.json
+tools/mapdump/map-areas.json
+tools/mapdump/DungeonLocation.java
+
+# IDE
+.idea/
+*.iml
+*.ipr
+*.iws
+.classpath
+.project
+.settings/
+out/
+
+# OS
+.DS_Store
+Thumbs.db

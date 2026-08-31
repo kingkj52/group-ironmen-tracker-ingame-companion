@@ -1,0 +1,183 @@
+package com.groupironmencompanion.ui;
+
+import com.groupironmencompanion.GroupIronmenCompanionConfig;
+import com.groupironmencompanion.data.GroupMember;
+import com.groupironmencompanion.data.GroupState;
+import java.awt.BorderLayout;
+import java.awt.GridLayout;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import javax.swing.BorderFactory;
+import javax.swing.BoxLayout;
+import javax.swing.JLabel;
+import javax.swing.JPanel;
+import javax.swing.SwingUtilities;
+import net.runelite.client.callback.ClientThread;
+import net.runelite.client.game.ItemManager;
+import net.runelite.client.ui.ColorScheme;
+import net.runelite.client.ui.FontManager;
+import net.runelite.client.ui.PluginPanel;
+import net.runelite.client.ui.components.materialtabs.MaterialTab;
+import net.runelite.client.ui.components.materialtabs.MaterialTabGroup;
+
+/**
+ * The sidebar dashboard: connection status, each member's vitals, a group-wide item search,
+ * and a skill comparison.
+ * <p>
+ * Everything shown is read from your group's server. The panel has no controls that affect
+ * the game.
+ */
+public class GroupPanel extends PluginPanel
+{
+	private final GroupState groupState;
+	private final GroupIronmenCompanionConfig config;
+
+	private final JLabel statusLabel = new JLabel();
+	private final JPanel membersView = new JPanel();
+	private final ItemSearchView itemsView;
+	private final SkillsView skillsView;
+	private final QuestsView questsView;
+	private final DiariesView diariesView;
+
+	private final Map<String, MemberCard> cards = new HashMap<>();
+
+	public GroupPanel(GroupState groupState, GroupIronmenCompanionConfig config,
+		ItemManager itemManager, ClientThread clientThread)
+	{
+		super(true);
+		this.groupState = groupState;
+		this.config = config;
+
+		this.itemsView = new ItemSearchView(groupState, itemManager, clientThread);
+		this.skillsView = new SkillsView(groupState);
+		this.questsView = new QuestsView(groupState);
+		this.diariesView = new DiariesView(groupState);
+
+		setLayout(new BorderLayout(0, 6));
+		setBackground(ColorScheme.DARK_GRAY_COLOR);
+		setBorder(BorderFactory.createEmptyBorder(6, 6, 6, 6));
+
+		statusLabel.setFont(FontManager.getRunescapeSmallFont());
+		statusLabel.setForeground(ColorScheme.LIGHT_GRAY_COLOR);
+		statusLabel.setBorder(BorderFactory.createEmptyBorder(0, 0, 4, 0));
+
+		membersView.setLayout(new BoxLayout(membersView, BoxLayout.Y_AXIS));
+		membersView.setBackground(ColorScheme.DARK_GRAY_COLOR);
+
+		JPanel display = new JPanel(new BorderLayout());
+		display.setBackground(ColorScheme.DARK_GRAY_COLOR);
+
+		MaterialTabGroup tabs = new MaterialTabGroup(display);
+		// MaterialTabGroup defaults to a FlowLayout, which wraps extra tabs onto a second row
+		// that BorderLayout.NORTH then clips to nothing. A grid keeps every tab visible and
+		// reports an honest preferred height.
+		tabs.setLayout(new GridLayout(0, 3, 4, 2));
+		MaterialTab groupTab = new MaterialTab("Group", tabs, membersView);
+		MaterialTab itemsTab = new MaterialTab("Items", tabs, itemsView);
+		MaterialTab skillsTab = new MaterialTab("Skills", tabs, skillsView);
+		MaterialTab questsTab = new MaterialTab("Quests", tabs, questsView);
+		MaterialTab diariesTab = new MaterialTab("Diaries", tabs, diariesView);
+
+		skillsTab.setOnSelectEvent(() ->
+		{
+			skillsView.refresh();
+			return true;
+		});
+		itemsTab.setOnSelectEvent(() ->
+		{
+			itemsView.refresh();
+			return true;
+		});
+		questsTab.setOnSelectEvent(() ->
+		{
+			questsView.refresh();
+			return true;
+		});
+		diariesTab.setOnSelectEvent(() ->
+		{
+			diariesView.refresh();
+			return true;
+		});
+
+		tabs.addTab(groupTab);
+		tabs.addTab(itemsTab);
+		tabs.addTab(skillsTab);
+		tabs.addTab(questsTab);
+		tabs.addTab(diariesTab);
+		tabs.select(groupTab);
+
+		JPanel header = new JPanel(new BorderLayout());
+		header.setBackground(ColorScheme.DARK_GRAY_COLOR);
+		header.add(statusLabel, BorderLayout.NORTH);
+		header.add(tabs, BorderLayout.SOUTH);
+
+		add(header, BorderLayout.NORTH);
+		add(display, BorderLayout.CENTER);
+	}
+
+	/** Safe to call from any thread. */
+	public void refresh()
+	{
+		SwingUtilities.invokeLater(this::refreshOnEdt);
+	}
+
+	public void setStatus(String status)
+	{
+		SwingUtilities.invokeLater(() -> statusLabel.setText("<html>" + escape(status) + "</html>"));
+	}
+
+	private void refreshOnEdt()
+	{
+		List<GroupMember> members = groupState.getMembers();
+
+		// Reuse a card per member so the panel does not flicker on every poll.
+		List<String> present = new ArrayList<>(members.size());
+		membersView.removeAll();
+
+		int shown = 0;
+		for (GroupMember member : members)
+		{
+			boolean online = member.isOnline(config.offlineAfterMinutes());
+			if (!online && !config.panelShowOffline())
+			{
+				continue;
+			}
+			if (groupState.isLocalPlayer(member) && !config.panelShowSelf())
+			{
+				continue;
+			}
+
+			present.add(member.getName());
+			MemberCard card = cards.computeIfAbsent(member.getName(), name -> new MemberCard());
+			card.update(member, online, config.panelShowActivity(), groupState.isLocalPlayer(member));
+			membersView.add(card);
+			shown++;
+		}
+
+		cards.keySet().retainAll(present);
+
+		if (shown == 0)
+		{
+			JLabel empty = new JLabel(members.isEmpty()
+				? "<html>No group data yet.<br>Check your group name and token in the plugin settings.</html>"
+				: "<html>Every member is hidden by the<br>side panel settings.</html>");
+			empty.setFont(FontManager.getRunescapeSmallFont());
+			empty.setForeground(ColorScheme.LIGHT_GRAY_COLOR);
+			membersView.add(empty);
+		}
+
+		skillsView.refresh();
+		questsView.refresh();
+		diariesView.refresh();
+
+		membersView.revalidate();
+		membersView.repaint();
+	}
+
+	private static String escape(String text)
+	{
+		return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
+	}
+}

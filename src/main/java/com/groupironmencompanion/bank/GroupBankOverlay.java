@@ -101,6 +101,7 @@ public class GroupBankOverlay extends Overlay
 	private Rectangle frameClose = new Rectangle();
 	private Rectangle frameSearch = new Rectangle();
 	private Rectangle frameGrid = new Rectangle();
+	private Rectangle frameScrollbar = new Rectangle();
 
 	@Inject
 	public GroupBankOverlay()
@@ -152,7 +153,7 @@ public class GroupBankOverlay extends Overlay
 
 		hits = new HitBoxes(
 			new Rectangle(origin.x, origin.y, WIDTH, height),
-			frameClose, frameSearch, frameGrid, frameTabs);
+			frameClose, frameSearch, frameGrid, frameScrollbar, frameTabs);
 
 		return new Dimension(WIDTH, height);
 	}
@@ -366,7 +367,7 @@ public class GroupBankOverlay extends Overlay
 		}
 
 		graphics.setClip(clip);
-		drawScrollbar(graphics, area, rows.size(), first);
+		drawScrollbar(graphics, origin, area, rows.size(), first);
 	}
 
 	private void drawCell(Graphics2D graphics, GroupBankViewer.Entry entry, int x, int y, java.awt.Point local)
@@ -409,14 +410,17 @@ public class GroupBankOverlay extends Overlay
 		}
 	}
 
-	private void drawScrollbar(Graphics2D graphics, Rectangle area, int totalRows, int firstRow)
+	private void drawScrollbar(Graphics2D graphics, java.awt.Point origin, Rectangle area,
+		int totalRows, int firstRow)
 	{
 		if (totalRows <= VISIBLE_ROWS)
 		{
+			frameScrollbar = new Rectangle();
 			return;
 		}
 
 		int x = area.x + area.width + 1;
+		frameScrollbar = toCanvas(new Rectangle(x, area.y, SCROLLBAR_WIDTH - 2, area.height), origin);
 		graphics.setColor(BankStyle.SEARCH_BACKGROUND);
 		graphics.fillRect(x, area.y, SCROLLBAR_WIDTH - 2, area.height);
 
@@ -438,7 +442,8 @@ public class GroupBankOverlay extends Overlay
 		text.append(viewer.getVisibleItemCount()).append(" stacks");
 		if (config.bankShowPrices())
 		{
-			text.append("  ·  ").append(BankStyle.gp(viewer.getVisibleValue())).append(" HA");
+			text.append("  ·  ").append(BankStyle.gp(viewer.getVisibleValue()))
+				.append(config.natureRuneCost() > 0 ? " alch profit" : " alch");
 		}
 		graphics.drawString(text.toString(), PADDING, height - 6);
 	}
@@ -469,12 +474,20 @@ public class GroupBankOverlay extends Overlay
 
 		if (config.bankShowPrices())
 		{
-			long value = viewer.alchValue(entry.getItemId()) * entry.getQuantity();
+			long each = viewer.alchValue(entry.getItemId());
 			panel.getChildren().add(LineComponent.builder()
-				.left("HA value")
+				.left("Alchs for")
 				.leftColor(BankStyle.TEXT_DIM)
-				.right(BankStyle.gp(value) + " gp")
+				.right(BankStyle.commas(each) + " ea")
 				.rightColor(BankStyle.TEXT_DIM)
+				.build());
+
+			long profit = viewer.alchProfit(entry.getItemId()) * entry.getQuantity();
+			panel.getChildren().add(LineComponent.builder()
+				.left(config.natureRuneCost() > 0 ? "Alch profit" : "Alch value")
+				.leftColor(BankStyle.TEXT_DIM)
+				.right(BankStyle.gp(profit) + " gp")
+				.rightColor(profit < 0 ? BankStyle.QUANTITY_LOW : BankStyle.TEXT_DIM)
 				.build());
 		}
 
@@ -516,6 +529,31 @@ public class GroupBankOverlay extends Overlay
 	// Hit testing, used by GroupBankInput
 	// ------------------------------------------------------------------
 
+	/**
+	 * The scroll row a click at this height on the scrollbar corresponds to.
+	 * <p>
+	 * The thumb is centred on the pointer, so grabbing it anywhere and dragging tracks the
+	 * mouse instead of jumping. Kept beside {@link #drawScrollbar} because the two share the
+	 * same thumb geometry.
+	 */
+	int scrollRowForY(int canvasY)
+	{
+		Rectangle track = hits.scrollbar;
+		int totalRows = viewer.getRows().size();
+		int maxScroll = totalRows - VISIBLE_ROWS;
+		if (track.height <= 0 || maxScroll <= 0)
+		{
+			return 0;
+		}
+
+		int thumbHeight = Math.max(12, track.height * VISIBLE_ROWS / totalRows);
+		int travel = Math.max(1, track.height - thumbHeight);
+		int offset = canvasY - track.y - thumbHeight / 2;
+
+		long row = Math.round((double) offset / travel * maxScroll);
+		return (int) Math.max(0, Math.min(maxScroll, row));
+	}
+
 	/** The most recently drawn frame's hit boxes. Never null. */
 	HitBoxes getHits()
 	{
@@ -529,21 +567,24 @@ public class GroupBankOverlay extends Overlay
 	static final class HitBoxes
 	{
 		static final HitBoxes EMPTY = new HitBoxes(
-			new Rectangle(), new Rectangle(), new Rectangle(), new Rectangle(),
+			new Rectangle(), new Rectangle(), new Rectangle(), new Rectangle(), new Rectangle(),
 			java.util.Collections.emptyList());
 
 		final Rectangle window;
 		final Rectangle close;
 		final Rectangle search;
 		final Rectangle grid;
+		final Rectangle scrollbar;
 		final List<TabHit> tabs;
 
-		HitBoxes(Rectangle window, Rectangle close, Rectangle search, Rectangle grid, List<TabHit> tabs)
+		HitBoxes(Rectangle window, Rectangle close, Rectangle search, Rectangle grid,
+			Rectangle scrollbar, List<TabHit> tabs)
 		{
 			this.window = window;
 			this.close = close;
 			this.search = search;
 			this.grid = grid;
+			this.scrollbar = scrollbar;
 			this.tabs = java.util.Collections.unmodifiableList(tabs);
 		}
 	}

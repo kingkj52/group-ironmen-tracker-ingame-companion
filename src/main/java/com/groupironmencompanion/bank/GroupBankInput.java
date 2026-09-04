@@ -42,6 +42,9 @@ public class GroupBankInput extends MouseAdapter implements MouseWheelListener
 	@Inject
 	private ChatboxPanelManager chatboxPanelManager;
 
+	/** Set while the scrollbar is being dragged, so movement keeps scrolling after the press. */
+	private boolean draggingScrollbar;
+
 	// ------------------------------------------------------------------
 	// Mouse
 	// ------------------------------------------------------------------
@@ -90,6 +93,14 @@ public class GroupBankInput extends MouseAdapter implements MouseWheelListener
 		{
 			// A click elsewhere dismisses the search prompt but still reaches the game.
 			clientThread.invoke(this::closeSearch);
+			return event;
+		}
+
+		if (hits.scrollbar.contains(point))
+		{
+			draggingScrollbar = true;
+			viewer.setScrollRow(overlay.scrollRowForY(point.y));
+			event.consume();
 			return event;
 		}
 
@@ -142,7 +153,28 @@ public class GroupBankInput extends MouseAdapter implements MouseWheelListener
 	@Override
 	public MouseEvent mouseReleased(MouseEvent event)
 	{
+		draggingScrollbar = false;
 		return swallowInsideWindow(event);
+	}
+
+	@Override
+	public MouseEvent mouseDragged(MouseEvent event)
+	{
+		if (!draggingScrollbar)
+		{
+			return event;
+		}
+		if (!config.bankViewer() || !viewer.isOpen())
+		{
+			draggingScrollbar = false;
+			return event;
+		}
+
+		// Track the pointer even once it leaves the bar, which is how scrollbars behave
+		// everywhere else; the row is clamped, so dragging past either end just pins it.
+		viewer.setScrollRow(overlay.scrollRowForY(event.getY()));
+		event.consume();
+		return event;
 	}
 
 	private MouseEvent swallowInsideWindow(MouseEvent event)

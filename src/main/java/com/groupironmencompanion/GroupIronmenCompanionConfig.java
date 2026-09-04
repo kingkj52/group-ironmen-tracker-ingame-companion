@@ -266,6 +266,21 @@ public interface GroupIronmenCompanionConfig extends Config
 		return true;
 	}
 
+	@Range(min = 0, max = 10000)
+	@ConfigItem(
+		keyName = "natureRuneCost",
+		name = "Nature rune cost",
+		description = "Subtracted from every item's alch value so the figures shown are the profit "
+			+ "from alching, not the raw value. The default is roughly what buying them from a rune "
+			+ "shop works out at. Set this to 0 to show the raw alch value instead.",
+		position = 6,
+		section = bankSection
+	)
+	default int natureRuneCost()
+	{
+		return 184;
+	}
+
 	@ConfigItem(
 		keyName = "bankShowPrices",
 		name = "Show high alch values",

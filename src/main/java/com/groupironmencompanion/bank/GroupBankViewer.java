@@ -40,6 +40,9 @@ public class GroupBankViewer
 	@Inject
 	private ItemManager itemManager;
 
+	@Inject
+	private com.groupironmencompanion.GroupIronmenCompanionConfig config;
+
 	@Getter
 	private volatile boolean open;
 
@@ -179,7 +182,7 @@ public class GroupBankViewer
 			if (!entry.header)
 			{
 				count++;
-				value += alchValue(entry.itemId) * entry.quantity;
+				value += alchProfit(entry.itemId) * entry.quantity;
 			}
 		}
 		visibleItemCount = count;
@@ -223,7 +226,7 @@ public class GroupBankViewer
 		Map<Integer, Long> values = new HashMap<>(entries.size());
 		for (Entry entry : entries)
 		{
-			values.put(entry.itemId, alchValue(entry.itemId) * entry.quantity);
+			values.put(entry.itemId, alchProfit(entry.itemId) * entry.quantity);
 		}
 		entries.sort(Comparator.comparingLong((Entry e) -> values.getOrDefault(e.itemId, 0L)).reversed());
 		return entries;
@@ -248,12 +251,14 @@ public class GroupBankViewer
 		}
 		else
 		{
-			sections.put("Bank", member.getBank());
+			// Bank goes last on purpose. It dwarfs everything else, so leading with it would
+			// bury the small containers behind a long scroll.
 			sections.put("Inventory", member.getInventory());
 			sections.put("Equipment", member.getEquipment());
 			sections.put("Rune pouch", member.getRunePouch());
-			sections.put("Seed vault", member.getSeedVault());
 			sections.put("Quiver", member.getQuiver());
+			sections.put("Seed vault", member.getSeedVault());
+			sections.put("Bank", member.getBank());
 		}
 
 		List<Entry> entries = new ArrayList<>();
@@ -321,8 +326,8 @@ public class GroupBankViewer
 	}
 
 	/**
-	 * High alchemy value of an item. Group ironmen cannot use the Grand Exchange, so what an
-	 * item alchs for is the number that actually means something to them.
+	 * What an item alchs for. Group ironmen cannot use the Grand Exchange, so this is the
+	 * number that actually means something to them.
 	 */
 	public long alchValue(int itemId)
 	{
@@ -334,6 +339,16 @@ public class GroupBankViewer
 		{
 			return 0;
 		}
+	}
+
+	/**
+	 * Profit from alching one of an item, after paying for the nature rune. Negative for
+	 * anything that alchs for less than the rune costs, which is worth seeing rather than
+	 * hiding. With the cost set to zero this is just the raw alch value.
+	 */
+	public long alchProfit(int itemId)
+	{
+		return alchValue(itemId) - Math.max(0, config.natureRuneCost());
 	}
 
 	@Nullable

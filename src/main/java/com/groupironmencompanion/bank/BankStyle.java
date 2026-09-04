@@ -63,6 +63,10 @@ final class BankStyle
 	/** Compact gp, e.g. 4.2m. */
 	static String gp(long value)
 	{
+		if (value < 0)
+		{
+			return "-" + gp(-value);
+		}
 		if (value >= 1_000_000_000L)
 		{
 			return String.format(Locale.ENGLISH, "%.1fb", value / 1_000_000_000.0);

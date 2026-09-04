@@ -43,6 +43,17 @@ public class GroupPanel extends PluginPanel
 
 	private final Map<String, MemberCard> cards = new HashMap<>();
 
+	/**
+	 * Rebuild for whichever tab is on screen.
+	 * <p>
+	 * A refresh runs on every poll, and rebuilding all five views each time meant decoding
+	 * every quest and all 492 diary tasks for every member several times a minute for panels
+	 * nobody was looking at. Only the visible one is rebuilt; the rest catch up when selected.
+	 */
+	private Runnable activeView = () ->
+	{
+	};
+
 	public GroupPanel(GroupState groupState, GroupIronmenCompanionConfig config,
 		ItemManager itemManager, ClientThread clientThread)
 	{
@@ -80,26 +91,11 @@ public class GroupPanel extends PluginPanel
 		MaterialTab questsTab = new MaterialTab("Quests", tabs, questsView);
 		MaterialTab diariesTab = new MaterialTab("Diaries", tabs, diariesView);
 
-		skillsTab.setOnSelectEvent(() ->
-		{
-			skillsView.refresh();
-			return true;
-		});
-		itemsTab.setOnSelectEvent(() ->
-		{
-			itemsView.refresh();
-			return true;
-		});
-		questsTab.setOnSelectEvent(() ->
-		{
-			questsView.refresh();
-			return true;
-		});
-		diariesTab.setOnSelectEvent(() ->
-		{
-			diariesView.refresh();
-			return true;
-		});
+		groupTab.setOnSelectEvent(() -> select(this::refreshMembers));
+		itemsTab.setOnSelectEvent(() -> select(itemsView::refresh));
+		skillsTab.setOnSelectEvent(() -> select(skillsView::refresh));
+		questsTab.setOnSelectEvent(() -> select(questsView::refresh));
+		diariesTab.setOnSelectEvent(() -> select(diariesView::refresh));
 
 		tabs.addTab(groupTab);
 		tabs.addTab(itemsTab);
@@ -107,6 +103,7 @@ public class GroupPanel extends PluginPanel
 		tabs.addTab(questsTab);
 		tabs.addTab(diariesTab);
 		tabs.select(groupTab);
+		activeView = this::refreshMembers;
 
 		JPanel header = new JPanel(new BorderLayout());
 		header.setBackground(ColorScheme.DARK_GRAY_COLOR);
@@ -128,7 +125,20 @@ public class GroupPanel extends PluginPanel
 		SwingUtilities.invokeLater(() -> statusLabel.setText("<html>" + escape(status) + "</html>"));
 	}
 
+	/** Remembers which view is on screen and rebuilds it once, on selection. */
+	private boolean select(Runnable view)
+	{
+		activeView = view;
+		view.run();
+		return true;
+	}
+
 	private void refreshOnEdt()
+	{
+		activeView.run();
+	}
+
+	private void refreshMembers()
 	{
 		List<GroupMember> members = groupState.getMembers();
 
@@ -167,10 +177,6 @@ public class GroupPanel extends PluginPanel
 			empty.setForeground(ColorScheme.LIGHT_GRAY_COLOR);
 			membersView.add(empty);
 		}
-
-		skillsView.refresh();
-		questsView.refresh();
-		diariesView.refresh();
 
 		membersView.revalidate();
 		membersView.repaint();

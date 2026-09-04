@@ -38,6 +38,15 @@ public class GroupState
 	private final AtomicReference<Instant> fromInstant = new AtomicReference<>(Instant.EPOCH);
 	private final List<Runnable> listeners = new CopyOnWriteArrayList<>();
 
+	/**
+	 * The sorted member list, rebuilt only when membership changes.
+	 * <p>
+	 * Four overlays ask for this every frame, and rebuilding plus sorting a list on each call
+	 * was pure churn. Immutable so it can be shared safely; callers that need to reorder it
+	 * take their own copy.
+	 */
+	private volatile List<GroupMember> sortedMembers = Collections.emptyList();
+
 	private volatile Color[] palette = new Color[0];
 	private volatile String localPlayerName;
 
@@ -59,6 +68,7 @@ public class GroupState
 	public void reset()
 	{
 		members.clear();
+		rebuildMemberList();
 		fromTime.set(EPOCH);
 		fromInstant.set(Instant.EPOCH);
 		fireChanged();
@@ -103,8 +113,17 @@ public class GroupState
 	// Reading
 	// ------------------------------------------------------------------
 
-	/** Real members, alphabetical, excluding the shared-bank pseudo member. */
+	/**
+	 * Real members, alphabetical, excluding the shared-bank pseudo member.
+	 * <p>
+	 * The returned list is immutable and shared. Copy it before reordering.
+	 */
 	public List<GroupMember> getMembers()
+	{
+		return sortedMembers;
+	}
+
+	private void rebuildMemberList()
 	{
 		List<GroupMember> result = new ArrayList<>(members.size());
 		for (GroupMember member : members.values())
@@ -115,7 +134,7 @@ public class GroupState
 			}
 		}
 		result.sort(Comparator.comparing(GroupMember::getName, String.CASE_INSENSITIVE_ORDER));
-		return result;
+		sortedMembers = Collections.unmodifiableList(result);
 	}
 
 	@Nullable
@@ -190,6 +209,9 @@ public class GroupState
 		}
 
 		boolean changed = false;
+		// Tracked separately from field changes: a poll can add or drop a member while every
+		// field comes back null, and the member list still has to be rebuilt for that.
+		boolean membershipChanged = false;
 		List<String> seen = new ArrayList<>(response.length);
 		Instant newest = fromInstant.get();
 
@@ -201,6 +223,10 @@ public class GroupState
 			}
 			seen.add(dto.name);
 
+			if (!members.containsKey(dto.name))
+			{
+				membershipChanged = true;
+			}
 			GroupMember member = members.computeIfAbsent(dto.name, GroupMember::new);
 			changed |= merge(member, dto);
 
@@ -219,7 +245,7 @@ public class GroupState
 		// removed from the group on the website.
 		if (!seen.isEmpty())
 		{
-			changed |= members.keySet().retainAll(seen);
+			membershipChanged |= members.keySet().retainAll(seen);
 		}
 
 		// Never move the cursor backwards; a poll that returned no changes must not reset it.
@@ -230,12 +256,16 @@ public class GroupState
 			fromTime.set(newest.toString());
 		}
 
-		if (changed)
+		if (membershipChanged)
+		{
+			rebuildMemberList();
+		}
+		if (changed || membershipChanged)
 		{
 			assignColours();
 			fireChanged();
 		}
-		return changed;
+		return changed || membershipChanged;
 	}
 
 	private boolean merge(GroupMember member, MemberDto dto)

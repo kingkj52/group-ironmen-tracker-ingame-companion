@@ -360,6 +360,7 @@ public class GroupIronmenCompanionPlugin extends Plugin
 		{
 			localPlayerName = null;
 			bankInput.closeAll();
+			routeTracker.stop();
 		}
 	}
 
@@ -494,6 +495,14 @@ public class GroupIronmenCompanionPlugin extends Plugin
 
 			case "uploadMode":
 				uploader.reset();
+				break;
+
+			case "mapPanel":
+			case "mapPanelRouting":
+				if (!config.mapPanel() || !config.mapPanelRouting())
+				{
+					clientThread.invoke(routeTracker::stop);
+				}
 				break;
 
 			default:

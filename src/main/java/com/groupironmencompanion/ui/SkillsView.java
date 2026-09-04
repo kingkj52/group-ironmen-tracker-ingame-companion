@@ -7,6 +7,7 @@ import java.awt.BorderLayout;
 import java.awt.Dimension;
 import java.awt.GridLayout;
 import java.text.NumberFormat;
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
@@ -80,7 +81,8 @@ class SkillsView extends JPanel
 			}
 		}
 
-		List<GroupMember> members = groupState.getMembers();
+		// getMembers() is shared and immutable; this view reorders it, so copy first.
+		List<GroupMember> members = new ArrayList<>(groupState.getMembers());
 		if (skill == null)
 		{
 			members.sort(Comparator.comparingInt(GroupMember::getTotalLevel).reversed());

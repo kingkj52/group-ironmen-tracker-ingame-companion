@@ -4,6 +4,10 @@ import com.google.gson.Gson;
 import com.google.gson.JsonSyntaxException;
 import com.groupironmencompanion.GroupIronmenCompanionConfig;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.Reader;
+import java.nio.charset.StandardCharsets;
 import java.util.concurrent.TimeUnit;
 import javax.annotation.Nullable;
 import javax.inject.Inject;
@@ -219,13 +223,13 @@ public class GroupApi
 			{
 				return null;
 			}
-			if (body.contentLength() > MAX_RESPONSE_BYTES)
-			{
-				log.warn("Group Ironmen Companion: ignoring an implausibly large response ({} bytes)",
-					body.contentLength());
-				return null;
-			}
-			return gson.fromJson(body.charStream(), MemberDto[].class);
+			// A declared length is only present when the server does not use chunked
+			// encoding, and most do, so the stream itself has to be bounded rather than
+			// trusting contentLength. Reading past the cap fails the parse instead of
+			// letting an unbounded body allocate without limit.
+			Reader reader = new InputStreamReader(
+				new BoundedInputStream(body.byteStream(), MAX_RESPONSE_BYTES), StandardCharsets.UTF_8);
+			return gson.fromJson(reader, MemberDto[].class);
 		}
 		catch (JsonSyntaxException e)
 		{
@@ -303,6 +307,57 @@ public class GroupApi
 		{
 			log.debug("update-group-member failed: {}", e.toString());
 			return false;
+		}
+	}
+
+	/** Fails the read once more than {@code limit} bytes have been consumed. */
+	private static final class BoundedInputStream extends InputStream
+	{
+		private final InputStream delegate;
+		private final long limit;
+		private long read;
+
+		BoundedInputStream(InputStream delegate, long limit)
+		{
+			this.delegate = delegate;
+			this.limit = limit;
+		}
+
+		@Override
+		public int read() throws IOException
+		{
+			int value = delegate.read();
+			if (value >= 0)
+			{
+				count(1);
+			}
+			return value;
+		}
+
+		@Override
+		public int read(byte[] buffer, int offset, int length) throws IOException
+		{
+			int got = delegate.read(buffer, offset, length);
+			if (got > 0)
+			{
+				count(got);
+			}
+			return got;
+		}
+
+		private void count(int bytes) throws IOException
+		{
+			read += bytes;
+			if (read > limit)
+			{
+				throw new IOException("response exceeded " + limit + " bytes");
+			}
+		}
+
+		@Override
+		public void close() throws IOException
+		{
+			delegate.close();
 		}
 	}
 

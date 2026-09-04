@@ -3,6 +3,8 @@ package com.groupironmencompanion.data;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
+import java.util.EnumMap;
+import java.util.Map;
 import java.util.List;
 import javax.annotation.Nullable;
 import net.runelite.api.Quest;
@@ -23,6 +25,9 @@ public final class Quests
 {
 	/** Quest ids ascending, which is the order the server stores states in. */
 	private static volatile Quest[] ordered;
+
+	/** Each quest's index into that order, so a lookup is not a scan of every quest. */
+	private static volatile Map<Quest, Integer> indices;
 
 	private Quests()
 	{
@@ -56,21 +61,31 @@ public final class Quests
 			return null;
 		}
 
-		Quest[] quests = ordered();
-		for (int i = 0; i < quests.length; i++)
+		Integer index = indices().get(quest);
+		if (index == null || index >= states.length)
 		{
-			if (quests[i] == quest)
-			{
-				if (i >= states.length)
-				{
-					return null;
-				}
-				int ordinal = states[i];
-				QuestState[] values = QuestState.values();
-				return ordinal >= 0 && ordinal < values.length ? values[ordinal] : null;
-			}
+			return null;
 		}
-		return null;
+
+		int ordinal = states[index];
+		QuestState[] values = QuestState.values();
+		return ordinal >= 0 && ordinal < values.length ? values[ordinal] : null;
+	}
+
+	private static Map<Quest, Integer> indices()
+	{
+		Map<Quest, Integer> local = indices;
+		if (local == null)
+		{
+			Quest[] quests = ordered();
+			local = new EnumMap<>(Quest.class);
+			for (int i = 0; i < quests.length; i++)
+			{
+				local.put(quests[i], i);
+			}
+			indices = local;
+		}
+		return local;
 	}
 
 	/** How many quests a member has finished, and how many they have started but not finished. */

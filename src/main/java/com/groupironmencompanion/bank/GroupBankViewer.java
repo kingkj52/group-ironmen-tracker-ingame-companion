@@ -29,7 +29,7 @@ import net.runelite.client.game.ItemManager;
 public class GroupBankViewer
 {
 	public static final String TAB_ALL = "All";
-	public static final String TAB_SHARED = "Shared";
+	public static final String TAB_SHARED = "Group Storage";
 
 	/** Items per row in the grid. */
 	public static final int COLUMNS = 8;
@@ -157,10 +157,7 @@ public class GroupBankViewer
 		{
 			newTabs.add(member.getName());
 		}
-		if (groupState.getSharedBank() != null)
-		{
-			newTabs.add(TAB_SHARED);
-		}
+		newTabs.add(TAB_SHARED);
 		tabs = newTabs;
 
 		if (!newTabs.contains(activeTab))
@@ -182,7 +179,7 @@ public class GroupBankViewer
 			if (!entry.header)
 			{
 				count++;
-				value += (long) itemManager.getItemPrice(entry.itemId) * entry.quantity;
+				value += alchValue(entry.itemId) * entry.quantity;
 			}
 		}
 		visibleItemCount = count;
@@ -226,7 +223,7 @@ public class GroupBankViewer
 		Map<Integer, Long> values = new HashMap<>(entries.size());
 		for (Entry entry : entries)
 		{
-			values.put(entry.itemId, (long) itemManager.getItemPrice(entry.itemId) * entry.quantity);
+			values.put(entry.itemId, alchValue(entry.itemId) * entry.quantity);
 		}
 		entries.sort(Comparator.comparingLong((Entry e) -> values.getOrDefault(e.itemId, 0L)).reversed());
 		return entries;
@@ -247,7 +244,7 @@ public class GroupBankViewer
 		Map<String, List<ItemStack>> sections = new LinkedHashMap<>();
 		if (TAB_SHARED.equals(tab))
 		{
-			sections.put("Shared bank", member.getBank());
+			sections.put("Group storage", member.getBank());
 		}
 		else
 		{
@@ -321,6 +318,22 @@ public class GroupBankViewer
 		}
 		String name = itemName(itemId);
 		return name != null && name.toLowerCase(Locale.ROOT).contains(filter.toLowerCase(Locale.ROOT));
+	}
+
+	/**
+	 * High alchemy value of an item. Group ironmen cannot use the Grand Exchange, so what an
+	 * item alchs for is the number that actually means something to them.
+	 */
+	public long alchValue(int itemId)
+	{
+		try
+		{
+			return Math.max(0, itemManager.getItemComposition(itemId).getHaPrice());
+		}
+		catch (Exception e)
+		{
+			return 0;
+		}
 	}
 
 	@Nullable

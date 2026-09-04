@@ -268,8 +268,8 @@ public interface GroupIronmenCompanionConfig extends Config
 
 	@ConfigItem(
 		keyName = "bankShowPrices",
-		name = "Show item values",
-		description = "Show the Grand Exchange value of the hovered item and of the whole filtered view.",
+		name = "Show high alch values",
+		description = "Show the high alchemy value of the hovered item and of the whole filtered view. Group ironmen cannot use the Grand Exchange, so what an item alchs for is the more useful number.",
 		position = 5,
 		section = bankSection
 	)

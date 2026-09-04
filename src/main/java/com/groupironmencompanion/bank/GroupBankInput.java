@@ -2,13 +2,12 @@ package com.groupironmencompanion.bank;
 
 import com.groupironmencompanion.GroupIronmenCompanionConfig;
 import java.awt.Rectangle;
-import java.awt.event.KeyEvent;
 import java.awt.event.MouseEvent;
 import java.awt.event.MouseWheelEvent;
 import javax.inject.Inject;
 import javax.inject.Singleton;
 import net.runelite.client.callback.ClientThread;
-import net.runelite.client.input.KeyListener;
+import net.runelite.client.game.chatbox.ChatboxPanelManager;
 import net.runelite.client.input.MouseAdapter;
 import net.runelite.client.input.MouseWheelListener;
 
@@ -21,7 +20,7 @@ import net.runelite.client.input.MouseWheelListener;
  * box. No input is translated into anything the game sends to the server.
  */
 @Singleton
-public class GroupBankInput extends MouseAdapter implements MouseWheelListener, KeyListener
+public class GroupBankInput extends MouseAdapter implements MouseWheelListener
 {
 	private static final int SCROLL_ROWS = 3;
 
@@ -39,6 +38,9 @@ public class GroupBankInput extends MouseAdapter implements MouseWheelListener, 
 
 	@Inject
 	private ClientThread clientThread;
+
+	@Inject
+	private ChatboxPanelManager chatboxPanelManager;
 
 	// ------------------------------------------------------------------
 	// Mouse
@@ -86,14 +88,18 @@ public class GroupBankInput extends MouseAdapter implements MouseWheelListener, 
 
 		if (!hits.window.contains(point))
 		{
-			// A click elsewhere just drops search focus; it still reaches the game.
-			viewer.setSearchFocused(false);
+			// A click elsewhere dismisses the search prompt but still reaches the game.
+			clientThread.invoke(this::closeSearch);
 			return event;
 		}
 
 		if (hits.close.contains(point))
 		{
-			viewer.setOpen(false);
+			clientThread.invoke(() ->
+			{
+				closeSearch();
+				viewer.setOpen(false);
+			});
 			event.consume();
 			return event;
 		}
@@ -103,13 +109,24 @@ public class GroupBankInput extends MouseAdapter implements MouseWheelListener, 
 			if (hit.bounds.contains(point))
 			{
 				viewer.setActiveTab(hit.tab);
-				viewer.setSearchFocused(false);
+				clientThread.invoke(this::closeSearch);
 				event.consume();
 				return event;
 			}
 		}
 
-		viewer.setSearchFocused(hits.search.contains(point));
+		boolean onSearchBox = hits.search.contains(point);
+		clientThread.invoke(() ->
+		{
+			if (onSearchBox)
+			{
+				openSearch();
+			}
+			else
+			{
+				closeSearch();
+			}
+		});
 
 		// Swallow anything else inside the window so clicks do not fall through to the game.
 		event.consume();
@@ -160,99 +177,39 @@ public class GroupBankInput extends MouseAdapter implements MouseWheelListener, 
 	}
 
 	// ------------------------------------------------------------------
-	// Keyboard
+	// Searching
 	// ------------------------------------------------------------------
 
-	@Override
-	public void keyTyped(KeyEvent event)
+	/**
+	 * Opens the game's own chatbox text input for the search box.
+	 * <p>
+	 * Capturing keystrokes directly does not work here. RuneLite's key remapping consumes
+	 * W, A, S and D for camera movement before any other listener sees them, and KeyManager
+	 * dispatches in registration order with no way to get in front of it. Anyone using WASD
+	 * camera could not type those letters into the search.
+	 * <p>
+	 * Going through the chatbox solves it at the source: key remapping already stands down
+	 * while the chatbox is taking input, so every letter arrives, and camera keys keep
+	 * working normally the rest of the time because nothing is being intercepted at all.
+	 */
+	private void openSearch()
 	{
-		if (!viewer.isOpen() || !viewer.isSearchFocused())
-		{
-			return;
-		}
-
-		char typed = event.getKeyChar();
-		if (typed >= ' ' && typed != KeyEvent.CHAR_UNDEFINED && viewer.getFilter().length() < 40)
-		{
-			viewer.setFilter(viewer.getFilter() + typed);
-			event.consume();
-		}
+		viewer.setSearchFocused(true);
+		chatboxPanelManager.openTextInput("Search group bank")
+			.value(viewer.getFilter())
+			.onChanged(value -> viewer.setFilter(value.trim()))
+			.onClose(() -> viewer.setSearchFocused(false))
+			.build();
 	}
 
-	@Override
-	public void keyPressed(KeyEvent event)
+	/** Closes the search prompt if it is the thing currently open. */
+	private void closeSearch()
 	{
-		if (!viewer.isOpen())
+		if (viewer.isSearchFocused())
 		{
-			return;
+			viewer.setSearchFocused(false);
+			chatboxPanelManager.close();
 		}
-
-		switch (event.getKeyCode())
-		{
-			case KeyEvent.VK_ESCAPE:
-				if (viewer.isSearchFocused() && !viewer.getFilter().isEmpty())
-				{
-					viewer.setFilter("");
-				}
-				else if (viewer.isSearchFocused())
-				{
-					viewer.setSearchFocused(false);
-				}
-				else
-				{
-					viewer.setOpen(false);
-				}
-				event.consume();
-				break;
-
-			case KeyEvent.VK_BACK_SPACE:
-				if (viewer.isSearchFocused())
-				{
-					String filter = viewer.getFilter();
-					if (!filter.isEmpty())
-					{
-						viewer.setFilter(filter.substring(0, filter.length() - 1));
-					}
-					event.consume();
-				}
-				break;
-
-			case KeyEvent.VK_ENTER:
-				if (viewer.isSearchFocused())
-				{
-					viewer.setSearchFocused(false);
-					event.consume();
-				}
-				break;
-
-			default:
-				// Everything else passes straight through to the game.
-				break;
-		}
-	}
-
-	@Override
-	public void keyReleased(KeyEvent event)
-	{
-		if (viewer.isOpen() && viewer.isSearchFocused() && isTextKey(event))
-		{
-			event.consume();
-		}
-	}
-
-	private static boolean isTextKey(KeyEvent event)
-	{
-		int code = event.getKeyCode();
-		return code == KeyEvent.VK_BACK_SPACE
-			|| code == KeyEvent.VK_ENTER
-			|| code == KeyEvent.VK_ESCAPE
-			|| (event.getKeyChar() >= ' ' && event.getKeyChar() != KeyEvent.CHAR_UNDEFINED);
-	}
-
-	@Override
-	public void focusLost()
-	{
-		viewer.setSearchFocused(false);
 	}
 
 	// ------------------------------------------------------------------
@@ -271,6 +228,19 @@ public class GroupBankInput extends MouseAdapter implements MouseWheelListener, 
 	 * A remembered position always wins. RuneLite persists it when you alt-drag the overlay
 	 * and restores it on startup, so re-docking on every open would throw that away.
 	 */
+	/**
+	 * Closes the window and any search prompt with it. Safe to call from any thread, so the
+	 * hotkey and the game events that dismiss the window can share one path.
+	 */
+	public void closeAll()
+	{
+		clientThread.invoke(() ->
+		{
+			closeSearch();
+			viewer.setOpen(false);
+		});
+	}
+
 	public void openBesideBank()
 	{
 		viewer.setOpen(true);

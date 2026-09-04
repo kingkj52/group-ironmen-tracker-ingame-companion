@@ -52,14 +52,24 @@ public class GroupBankOverlay extends Overlay
 	private static final int FOOTER_HEIGHT = 18;
 	private static final int SCROLLBAR_WIDTH = 6;
 
-	private static final int HEIGHT =
-		TITLE_HEIGHT + TAB_HEIGHT + SEARCH_HEIGHT + VISIBLE_ROWS * CELL_HEIGHT + FOOTER_HEIGHT + PADDING;
+	/** Height for a window whose tab strip occupies the given number of rows. */
+	private static int heightFor(int tabRows)
+	{
+		return TITLE_HEIGHT + tabRows * TAB_HEIGHT + SEARCH_HEIGHT
+			+ VISIBLE_ROWS * CELL_HEIGHT + FOOTER_HEIGHT + PADDING;
+	}
+
+	/** Rows the tab strip needed when it was last laid out. */
+	private volatile int tabRows = 1;
 
 	static final int WIDTH =
 		PADDING * 2 + GroupBankViewer.COLUMNS * CELL_WIDTH + SCROLLBAR_WIDTH;
 
 	private static final Font TAB_FONT = new Font(Font.SANS_SERIF, Font.PLAIN, 11);
 	private static final Font QUANTITY_FONT = new Font(Font.SANS_SERIF, Font.PLAIN, 11);
+
+	/** Matches the skills hover panel, which is dark enough to stay readable over the bank. */
+	private static final Color TOOLTIP_BACKGROUND = new Color(22, 19, 15, 235);
 
 	@Inject
 	private Client client;
@@ -104,7 +114,7 @@ public class GroupBankOverlay extends Overlay
 
 	public Dimension getWindowSize()
 	{
-		return new Dimension(WIDTH, HEIGHT);
+		return new Dimension(WIDTH, heightFor(tabRows));
 	}
 
 	@Override
@@ -126,31 +136,38 @@ public class GroupBankOverlay extends Overlay
 
 		frameTabs = new ArrayList<>();
 
-		drawFrame(graphics);
+		// Tabs are laid out before anything is drawn, because how many rows they need
+		// decides how tall the window is.
+		graphics.setFont(TAB_FONT);
+		List<List<TabSlot>> layout = layoutTabs(graphics.getFontMetrics(), viewer.getTabs());
+		tabRows = Math.max(1, layout.size());
+		int height = heightFor(tabRows);
+
+		drawFrame(graphics, height);
 		int y = drawTitle(graphics, origin, local);
-		y = drawTabs(graphics, origin, y, local);
+		y = drawTabs(graphics, origin, y, local, layout);
 		y = drawSearch(graphics, origin, y, local);
 		drawGrid(graphics, origin, y, local);
-		drawFooter(graphics);
+		drawFooter(graphics, height);
 
 		hits = new HitBoxes(
-			new Rectangle(origin.x, origin.y, WIDTH, HEIGHT),
+			new Rectangle(origin.x, origin.y, WIDTH, height),
 			frameClose, frameSearch, frameGrid, frameTabs);
 
-		return new Dimension(WIDTH, HEIGHT);
+		return new Dimension(WIDTH, height);
 	}
 
 	// ------------------------------------------------------------------
 	// Drawing
 	// ------------------------------------------------------------------
 
-	private void drawFrame(Graphics2D graphics)
+	private void drawFrame(Graphics2D graphics, int height)
 	{
 		graphics.setColor(BankStyle.BACKGROUND);
-		graphics.fillRect(0, 0, WIDTH, HEIGHT);
+		graphics.fillRect(0, 0, WIDTH, height);
 		graphics.setColor(BankStyle.BORDER);
 		graphics.setStroke(new BasicStroke(1f));
-		graphics.drawRect(0, 0, WIDTH - 1, HEIGHT - 1);
+		graphics.drawRect(0, 0, WIDTH - 1, height - 1);
 	}
 
 	private int drawTitle(Graphics2D graphics, java.awt.Point origin, java.awt.Point local)
@@ -172,51 +189,96 @@ public class GroupBankOverlay extends Overlay
 		return TITLE_HEIGHT;
 	}
 
-	private int drawTabs(Graphics2D graphics, java.awt.Point origin, int top, java.awt.Point local)
+	/**
+	 * Arranges the tabs into rows that fit the window's width.
+	 * <p>
+	 * They used to be drawn on a single strip, and anything past the right edge was simply
+	 * dropped. With a full group that silently swallowed the last tab, which is how the
+	 * group storage tab became unreachable. Wrapping keeps every tab clickable.
+	 */
+	private List<List<TabSlot>> layoutTabs(FontMetrics metrics, List<String> tabs)
 	{
-		List<String> tabs = viewer.getTabs();
+		List<List<TabSlot>> rows = new ArrayList<>();
 		if (tabs.isEmpty())
 		{
-			return top;
+			return rows;
 		}
 
-		graphics.setFont(TAB_FONT);
-		FontMetrics metrics = graphics.getFontMetrics();
-
-		int x = PADDING;
 		int available = WIDTH - PADDING * 2;
+		List<TabSlot> row = new ArrayList<>();
+		int x = PADDING;
+
 		for (String tab : tabs)
 		{
-			String label = abbreviate(tab, metrics, 64);
-			int width = metrics.stringWidth(label) + 12;
+			String label = abbreviate(tab, metrics, 96);
+			int width = Math.min(available, metrics.stringWidth(label) + 12);
 
-			if (x + width > available && x > PADDING)
+			if (x > PADDING && x + width > available + PADDING)
 			{
-				// Out of room on this strip; the remaining tabs are unreachable, so stop
-				// rather than drawing them off the edge.
-				break;
+				rows.add(row);
+				row = new ArrayList<>();
+				x = PADDING;
 			}
 
-			Rectangle rect = new Rectangle(x, top + 2, width, TAB_HEIGHT - 4);
-			boolean active = tab.equals(viewer.getActiveTab());
-
-			graphics.setColor(active ? BankStyle.TAB_ACTIVE : BankStyle.TAB_IDLE);
-			graphics.fillRect(rect.x, rect.y, rect.width, rect.height);
-
-			if (rect.contains(local) && !active)
-			{
-				graphics.setColor(BankStyle.HOVER);
-				graphics.fillRect(rect.x, rect.y, rect.width, rect.height);
-			}
-
-			graphics.setColor(active ? Color.WHITE : colourForTab(tab));
-			graphics.drawString(label, rect.x + 6, rect.y + rect.height - 5);
-
-			frameTabs.add(new TabHit(tab, toCanvas(rect, origin)));
+			row.add(new TabSlot(tab, label, x, width));
 			x += width + 2;
 		}
 
-		return top + TAB_HEIGHT;
+		if (!row.isEmpty())
+		{
+			rows.add(row);
+		}
+		return rows;
+	}
+
+	private int drawTabs(Graphics2D graphics, java.awt.Point origin, int top,
+		java.awt.Point local, List<List<TabSlot>> layout)
+	{
+		graphics.setFont(TAB_FONT);
+
+		int y = top;
+		for (List<TabSlot> row : layout)
+		{
+			for (TabSlot slot : row)
+			{
+				Rectangle rect = new Rectangle(slot.x, y + 2, slot.width, TAB_HEIGHT - 4);
+				boolean active = slot.tab.equals(viewer.getActiveTab());
+
+				graphics.setColor(active ? BankStyle.TAB_ACTIVE : BankStyle.TAB_IDLE);
+				graphics.fillRect(rect.x, rect.y, rect.width, rect.height);
+
+				if (rect.contains(local) && !active)
+				{
+					graphics.setColor(BankStyle.HOVER);
+					graphics.fillRect(rect.x, rect.y, rect.width, rect.height);
+				}
+
+				graphics.setColor(active ? Color.WHITE : colourForTab(slot.tab));
+				graphics.drawString(slot.label, rect.x + 6, rect.y + rect.height - 5);
+
+				frameTabs.add(new TabHit(slot.tab, toCanvas(rect, origin)));
+			}
+			y += TAB_HEIGHT;
+		}
+
+		return Math.max(y, top + TAB_HEIGHT);
+	}
+
+	/** One tab's place on its row, worked out before anything is drawn. */
+	private static final class TabSlot
+	{
+		private final String tab;
+		private final String label;
+		private final int x;
+		private final int width;
+
+		TabSlot(String tab, String label, int x, int width)
+		{
+			this.tab = tab;
+			this.label = label;
+			this.x = x;
+			this.width = width;
+		}
 	}
 
 	private int drawSearch(Graphics2D graphics, java.awt.Point origin, int top, java.awt.Point local)
@@ -343,7 +405,7 @@ public class GroupBankOverlay extends Overlay
 
 		if (hovered)
 		{
-			addTooltip(entry);
+			addTooltip(graphics, entry);
 		}
 	}
 
@@ -367,7 +429,7 @@ public class GroupBankOverlay extends Overlay
 		graphics.fillRect(x, thumbY, SCROLLBAR_WIDTH - 2, thumbHeight);
 	}
 
-	private void drawFooter(Graphics2D graphics)
+	private void drawFooter(Graphics2D graphics, int height)
 	{
 		graphics.setFont(TAB_FONT);
 		graphics.setColor(BankStyle.TEXT_DIM);
@@ -376,16 +438,16 @@ public class GroupBankOverlay extends Overlay
 		text.append(viewer.getVisibleItemCount()).append(" stacks");
 		if (config.bankShowPrices())
 		{
-			text.append("  ·  ").append(BankStyle.gp(viewer.getVisibleValue())).append(" gp");
+			text.append("  ·  ").append(BankStyle.gp(viewer.getVisibleValue())).append(" HA");
 		}
-		graphics.drawString(text.toString(), PADDING, HEIGHT - 6);
+		graphics.drawString(text.toString(), PADDING, height - 6);
 	}
 
 	// ------------------------------------------------------------------
 	// Tooltip
 	// ------------------------------------------------------------------
 
-	private void addTooltip(GroupBankViewer.Entry entry)
+	private void addTooltip(Graphics2D graphics, GroupBankViewer.Entry entry)
 	{
 		String name = viewer.itemName(entry.getItemId());
 		if (name == null)
@@ -395,6 +457,7 @@ public class GroupBankOverlay extends Overlay
 
 		PanelComponent panel = new PanelComponent();
 		panel.setPreferredSize(new Dimension(190, 0));
+		panel.setBackgroundColor(TOOLTIP_BACKGROUND);
 		panel.getChildren().add(TitleComponent.builder().text(name).color(Color.WHITE).build());
 
 		panel.getChildren().add(LineComponent.builder()
@@ -406,9 +469,9 @@ public class GroupBankOverlay extends Overlay
 
 		if (config.bankShowPrices())
 		{
-			long value = (long) itemManager.getItemPrice(entry.getItemId()) * entry.getQuantity();
+			long value = viewer.alchValue(entry.getItemId()) * entry.getQuantity();
 			panel.getChildren().add(LineComponent.builder()
-				.left("Value")
+				.left("HA value")
 				.leftColor(BankStyle.TEXT_DIM)
 				.right(BankStyle.gp(value) + " gp")
 				.rightColor(BankStyle.TEXT_DIM)
@@ -430,7 +493,23 @@ public class GroupBankOverlay extends Overlay
 			}
 		}
 
-		tooltipManager.add(new Tooltip(panel));
+		// PanelComponent sizes its background from the child dimensions measured during the
+		// previous render, and this panel is built fresh every frame, so on its only render
+		// that size is zero and the background never appears. Rendering once against a
+		// scratch context clipped to nothing measures the children without drawing anything,
+		// leaving the real render with a correctly sized background.
+		Graphics2D scratch = (Graphics2D) graphics.create();
+		try
+		{
+			scratch.setClip(0, 0, 0, 0);
+			panel.render(scratch);
+		}
+		finally
+		{
+			scratch.dispose();
+		}
+
+		tooltipManager.add(new Tooltip(new TintedTooltip(panel)));
 	}
 
 	// ------------------------------------------------------------------

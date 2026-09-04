@@ -23,8 +23,8 @@ import net.runelite.client.ui.components.materialtabs.MaterialTab;
 import net.runelite.client.ui.components.materialtabs.MaterialTabGroup;
 
 /**
- * The sidebar dashboard: connection status, each member's vitals, a group-wide item search,
- * and a skill comparison.
+ * The sidebar dashboard: connection status, member vitals, a group-wide item search, and
+ * skill, quest and diary comparisons.
  * <p>
  * Everything shown is read from your group's server. The panel has no controls that affect
  * the game.

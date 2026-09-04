@@ -171,7 +171,7 @@ public class GroupIronmenCompanionPlugin extends Plugin
 			{
 				if (bankViewer.isOpen())
 				{
-					bankViewer.setOpen(false);
+					bankInput.closeAll();
 				}
 				else
 				{
@@ -204,7 +204,6 @@ public class GroupIronmenCompanionPlugin extends Plugin
 		overlayManager.add(mapOverlay);
 
 		keyManager.registerKeyListener(bankHotkey);
-		keyManager.registerKeyListener(bankInput);
 		mouseManager.registerMouseListener(bankInput);
 		mouseManager.registerMouseWheelListener(bankInput);
 		mouseManager.registerMouseListener(mapInput);
@@ -247,7 +246,6 @@ public class GroupIronmenCompanionPlugin extends Plugin
 		overlayManager.remove(mapOverlay);
 
 		keyManager.unregisterKeyListener(bankHotkey);
-		keyManager.unregisterKeyListener(bankInput);
 		mouseManager.unregisterMouseListener(bankInput);
 		mouseManager.unregisterMouseWheelListener(bankInput);
 		mouseManager.unregisterMouseListener(mapInput);
@@ -361,7 +359,7 @@ public class GroupIronmenCompanionPlugin extends Plugin
 		if (event.getGameState() == GameState.LOGIN_SCREEN || event.getGameState() == GameState.HOPPING)
 		{
 			localPlayerName = null;
-			bankViewer.setOpen(false);
+			bankInput.closeAll();
 		}
 	}
 
@@ -437,7 +435,7 @@ public class GroupIronmenCompanionPlugin extends Plugin
 	{
 		if (event.getGroupId() == InterfaceID.BANKMAIN && config.bankCloseWithBank())
 		{
-			bankViewer.setOpen(false);
+			bankInput.closeAll();
 		}
 	}
 
@@ -473,7 +471,7 @@ public class GroupIronmenCompanionPlugin extends Plugin
 			case "bankViewer":
 				if (!config.bankViewer())
 				{
-					bankViewer.setOpen(false);
+					bankInput.closeAll();
 				}
 				break;
 

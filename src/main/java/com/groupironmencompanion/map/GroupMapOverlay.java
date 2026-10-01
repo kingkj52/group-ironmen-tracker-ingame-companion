@@ -72,6 +72,9 @@ public class GroupMapOverlay extends Overlay
 	@Inject
 	private GroupMapMarkers markers;
 
+	@Inject
+	private WorldMapPlusBridge worldMapPlus;
+
 	/** Rows of the last drawn frame, published for the AWT-side input handler. */
 	private volatile List<Row> rows = Collections.emptyList();
 
@@ -226,6 +229,10 @@ public class GroupMapOverlay extends Overlay
 		{
 			return;
 		}
+
+		// World Map Plus, when it is installed, shows the member where they really are, underground or
+		// not. The game's own map is still moved below for everyone who does not use it.
+		worldMapPlus.focus(truePosition, member.getName());
 
 		WorldMap worldMap = client.getWorldMap();
 		if (worldMap == null)

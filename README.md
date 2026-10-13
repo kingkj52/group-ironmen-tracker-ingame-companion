@@ -16,21 +16,36 @@ back to collecting that data itself when that plugin is not running.
 Every feature below can be switched off on its own in the plugin settings.
 
 **Group bank** - a read-only, searchable window showing everything the group owns.
-`Ctrl+G` by default, or click the small **Group** tab that appears beside your bank.
+`Ctrl+G` by default, or click the **Group** tab (a bank tab with the group ironman helmet)
+that appears beside your bank.
 
-The first time you open it, it places itself to the left of the bank, or against the left
-edge of the screen when the bank is too wide to sit beside (which it always is in fixed
-mode). After that, alt-drag it wherever you like: RuneLite remembers the position and the
-plugin never moves it again.
+It looks like the bank it sits next to: it is drawn from the bank's own frame, tab, button
+and scrollbar sprites, in the game's own fonts, with items at the bank's spacing.
+
+The first time you open it, it places itself to the right of the bank, just below the Group
+tab. If it does not fit there it goes to the left of the bank, or against the left edge of
+the screen when the bank is too wide to sit beside (which it always is in fixed mode). After
+that, alt-drag it wherever you like: RuneLite remembers the position and the plugin never
+moves it again.
 
 It only swallows clicks inside its own frame, so your own bank stays fully usable beside it.
 
 - An **All** tab totalling every item across the group, sorted by value, with a hover
   breakdown of who is holding it.
 - A tab per member, split into Bank / Inventory / Equipment / Rune pouch / Seed vault /
-  Quiver, plus a **Shared** tab for the group storage.
+  Quiver, plus a **Group Storage** tab.
+- Every tab is a bank tab tile. A member's tile shows the group ironman helmet in that
+  member's colour, the one their world map marker uses, above their name, and widens to fit
+  the name when there is room. Hover any tile for its name.
 - Click the search box and type to filter. `Esc` clears, then closes.
 - Alt-drag to move it, like any RuneLite overlay.
+- Drag any edge or corner of its frame to resize it, no Alt needed. The frame follows the
+  mouse, from 4 x 3 items up to whatever fits on screen; the grid shows as many whole bank
+  cells as fit and spreads any spare space between them. RuneLite remembers the size along
+  with the position.
+- **Themes:** it follows interface reskins from the Resource Packs plugin and RuneLite's
+  Interface Styles, including the bank's line colours, and the map list, skills panel and
+  tooltips take RuneLite's overlay colour.
 
 **Group levels on the Skills tab** - hover any skill and a panel lists every member's level,
 experience and experience to the next level, each in that member's colour. The panel is
@@ -118,9 +133,12 @@ bar, so this plugin is built to stay clearly inside
   Nothing it draws can cause an action to be sent to the server, which is the guidelines'
   actual prohibition on menus. Everything clickable belongs to the plugin's own overlays.
 - **No interface modification.** No game widget is created, hidden, unhidden, reparented,
-  moved or resized, and no click zone is changed. Game widgets are read for their on-screen
-  bounds only - to know which skill the mouse is over, and where the bank window sits so the
-  Group tab can be drawn *outside* it. Every view is the plugin's own drawing.
+  moved, resized or recoloured, and no click zone is changed. Game widgets are only read -
+  for their on-screen bounds, to know which skill the mouse is over and where the bank window
+  sits so the Group tab can be drawn *outside* it, and for the colour of the bank's separator
+  line, so the group bank can match a recoloured bank. Every view is the plugin's own drawing.
+  The game's sprites, and any interface reskin's replacements for them, are only read, to
+  draw those views in the bank's style; nothing is ever written to them.
 - **Read-only by construction.** The plugin only ever holds item ids and quantities read back
   from your group's server. There is no code path that could withdraw, deposit or use
   anything.

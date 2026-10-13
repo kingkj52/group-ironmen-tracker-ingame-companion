@@ -2,9 +2,8 @@ package com.groupironmencompanion.bank;
 
 import com.groupironmencompanion.GroupIronmenCompanionConfig;
 import java.awt.BasicStroke;
-import java.awt.Color;
 import java.awt.Dimension;
-import java.awt.Font;
+import java.awt.FontMetrics;
 import java.awt.Graphics2D;
 import java.awt.Rectangle;
 import javax.annotation.Nullable;
@@ -13,14 +12,20 @@ import javax.inject.Singleton;
 import net.runelite.api.Client;
 import net.runelite.api.Point;
 import net.runelite.api.gameval.InterfaceID;
+import net.runelite.api.gameval.SpriteID;
 import net.runelite.api.widgets.Widget;
 import net.runelite.client.ui.overlay.Overlay;
 import net.runelite.client.ui.overlay.OverlayLayer;
 import net.runelite.client.ui.overlay.OverlayPosition;
+import net.runelite.client.ui.overlay.tooltip.Tooltip;
+import net.runelite.client.ui.overlay.tooltip.TooltipManager;
 
 /**
- * A small "Group" tab drawn alongside the bank while it is open, so the group bank viewer is
+ * A small Group tab drawn alongside the bank while it is open, so the group bank viewer is
  * one click away without having to remember the hotkey.
+ * <p>
+ * It is one of the bank's own tab tiles carrying the group ironman helmet, level with the
+ * bank's tab row, so it reads as an extra tab sticking out of the bank's side.
  * <p>
  * The tab is drawn by the plugin outside the bank window's own rectangle. No widget is
  * created, reparented, resized or unhidden, and no menu entry is added: clicking it only
@@ -29,9 +34,27 @@ import net.runelite.client.ui.overlay.OverlayPosition;
 @Singleton
 public class GroupBankTabOverlay extends Overlay
 {
-	private static final int TAB_WIDTH = 52;
-	private static final int TAB_HEIGHT = 22;
+	/** A bank tab tile. */
+	private static final int TAB_WIDTH = 41;
+	private static final int TAB_HEIGHT = 40;
 	private static final int GAP = 3;
+
+	/** How far below the bank's top edge its own row of tabs starts. */
+	private static final int TAB_ROW_TOP = 35;
+
+	/** The gap between the Group tab and the top of a viewer opened beneath it. */
+	private static final int BELOW_TAB_GAP = 2;
+
+	private static final int[] SPRITES = {
+		SpriteID.Banktabs.TAB, SpriteID.Banktabs.HOVERED, SpriteID.Banktabs.SELECTED,
+		SpriteID.SideiconsInterface._32,
+	};
+
+	/** The group ironman helmet, the icon the game uses for group ironman things. */
+	private static final int ICON = SpriteID.SideiconsInterface._32;
+
+	private static final String LABEL = "Group";
+	private static final String TOOLTIP = "Group bank";
 
 	/**
 	 * Keeps the viewer clear of the top-left corner, where the client draws the click-to-move
@@ -40,13 +63,19 @@ public class GroupBankTabOverlay extends Overlay
 	private static final int TOP_MARGIN = 24;
 	private static final int SIDE_MARGIN = 4;
 
-	private static final Font FONT = new Font(Font.SANS_SERIF, Font.BOLD, 11);
+	private static final BasicStroke BORDER_STROKE = new BasicStroke(1f);
 
 	@Inject
 	private Client client;
 
 	@Inject
 	private GroupBankViewer viewer;
+
+	@Inject
+	private GameSprites sprites;
+
+	@Inject
+	private TooltipManager tooltipManager;
 
 	@Inject
 	private GroupIronmenCompanionConfig config;
@@ -79,11 +108,36 @@ public class GroupBankTabOverlay extends Overlay
 
 		Rectangle tab = place(bankBounds);
 		hit = tab;
+		sprites.refresh();
 
 		Point mouse = client.getMouseCanvasPosition();
 		boolean hovered = mouse != null && tab.contains(mouse.getX(), mouse.getY());
 		boolean active = viewer.isOpen();
 
+		if (sprites.hasAll(SPRITES))
+		{
+			int tile = active ? SpriteID.Banktabs.SELECTED
+				: hovered ? SpriteID.Banktabs.HOVERED
+				: SpriteID.Banktabs.TAB;
+			sprites.draw(graphics, tile, tab.x, tab.y);
+			sprites.drawCentred(graphics, ICON, tab.x, tab.y, tab.width, tab.height);
+		}
+		else
+		{
+			drawFlat(graphics, tab, active, hovered);
+		}
+
+		if (hovered)
+		{
+			tooltipManager.add(new Tooltip(TOOLTIP));
+		}
+
+		return null;
+	}
+
+	/** The tab without sprites, should the cache not provide them: a box with a label. */
+	private static void drawFlat(Graphics2D graphics, Rectangle tab, boolean active, boolean hovered)
+	{
 		graphics.setColor(active ? BankStyle.TAB_ACTIVE : BankStyle.TITLE_BACKGROUND);
 		graphics.fillRect(tab.x, tab.y, tab.width, tab.height);
 
@@ -94,15 +148,15 @@ public class GroupBankTabOverlay extends Overlay
 		}
 
 		graphics.setColor(BankStyle.BORDER);
-		graphics.setStroke(new BasicStroke(1f));
+		graphics.setStroke(BORDER_STROKE);
 		graphics.drawRect(tab.x, tab.y, tab.width - 1, tab.height - 1);
 
-		graphics.setFont(FONT);
-		graphics.setColor(active || hovered ? Color.WHITE : BankStyle.TEXT);
-		int textWidth = graphics.getFontMetrics().stringWidth("Group");
-		graphics.drawString("Group", tab.x + (tab.width - textWidth) / 2, tab.y + 15);
-
-		return null;
+		GameText.prepare(graphics);
+		graphics.setFont(GameText.SMALL);
+		FontMetrics metrics = graphics.getFontMetrics();
+		GameText.drawShadowed(graphics, LABEL, tab.x + (tab.width - metrics.stringWidth(LABEL)) / 2,
+			GameText.centredBaseline(metrics, tab.y, tab.height),
+			active || hovered ? GameText.HOVER : GameText.ORANGE);
 	}
 
 	/**
@@ -111,7 +165,7 @@ public class GroupBankTabOverlay extends Overlay
 	 */
 	private Rectangle place(Rectangle bank)
 	{
-		int y = bank.y + 4;
+		int y = bank.y + TAB_ROW_TOP;
 
 		int right = bank.x + bank.width + GAP;
 		if (right + TAB_WIDTH <= client.getCanvasWidth())
@@ -150,8 +204,12 @@ public class GroupBankTabOverlay extends Overlay
 
 	/**
 	 * Where the viewer should appear the very first time it is opened, before the user has
-	 * dragged it anywhere. Prefers the left of the bank, and pins to the left edge of the
-	 * canvas when the bank is too wide to sit beside, which at least puts it somewhere
+	 * dragged it anywhere.
+	 * <p>
+	 * It prefers to hang just below the Group tab, left edges level, when that tab sits to
+	 * the right of the bank: the window then opens right under the tab that opened it, and
+	 * clear of the bank. When it does not fit there it goes to the left of the bank, and
+	 * failing that is pinned to the left edge of the canvas, which at least puts it somewhere
 	 * predictable and out of the way of the bank's own controls.
 	 * <p>
 	 * Reads the bank widget, so this must be called on the client thread.
@@ -166,6 +224,15 @@ public class GroupBankTabOverlay extends Overlay
 		{
 			return clamp((canvasWidth - windowWidth) / 2, (canvasHeight - windowHeight) / 2,
 				windowWidth, windowHeight, canvasWidth, canvasHeight);
+		}
+
+		Rectangle tab = place(bank);
+		int belowTabY = tab.y + tab.height + BELOW_TAB_GAP;
+		if (tab.x >= bank.x + bank.width
+			&& tab.x + windowWidth + SIDE_MARGIN <= canvasWidth
+			&& belowTabY + windowHeight + SIDE_MARGIN <= canvasHeight)
+		{
+			return new java.awt.Point(tab.x, belowTabY);
 		}
 
 		int left = bank.x - GAP - windowWidth;

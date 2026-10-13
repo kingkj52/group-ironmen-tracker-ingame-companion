@@ -18,6 +18,7 @@ import javax.inject.Singleton;
 import net.runelite.api.Client;
 import net.runelite.api.Experience;
 import net.runelite.api.widgets.Widget;
+import net.runelite.client.config.RuneLiteConfig;
 import net.runelite.client.ui.overlay.Overlay;
 import net.runelite.client.ui.overlay.OverlayLayer;
 import net.runelite.client.ui.overlay.OverlayPosition;
@@ -43,7 +44,10 @@ public class SkillHoverOverlay extends Overlay
 	private static final NumberFormat NUMBERS = NumberFormat.getIntegerInstance(Locale.ENGLISH);
 	private static final Color DIM = new Color(0xB0, 0xB0, 0xB0);
 
-	/** Nearly opaque so the panel stays legible over the game world behind it. */
+	/**
+	 * Nearly opaque so the panel stays legible over the game world behind it. Used as is when
+	 * not matching the interface theme, and as the minimum opacity when it is.
+	 */
 	private static final Color BACKGROUND = new Color(22, 19, 15, 235);
 
 	private static final int PANEL_WIDTH = 200;
@@ -62,6 +66,12 @@ public class SkillHoverOverlay extends Overlay
 
 	@Inject
 	private GroupIronmenCompanionConfig config;
+
+	@Inject
+	private RuneLiteConfig runeLiteConfig;
+
+	@Inject
+	private PanelBackground panelBackground;
 
 	@Inject
 	public SkillHoverOverlay()
@@ -89,6 +99,11 @@ public class SkillHoverOverlay extends Overlay
 		}
 
 		Placement placement = choosePlacement(grid);
+
+		// A RuneLite panel, not a game interface, so it uses RuneLite's interface font: the
+		// one the user picked for overlay panels. Being a dynamic overlay it would otherwise
+		// get the font meant for text drawn over the game world.
+		graphics.setFont(runeLiteConfig.interfaceFont().getFont());
 
 		PanelComponent panel = buildPanel(hovered, placement.width);
 		if (panel == null)
@@ -196,7 +211,7 @@ public class SkillHoverOverlay extends Overlay
 
 		PanelComponent panel = new PanelComponent();
 		panel.setPreferredSize(new Dimension(width, 0));
-		panel.setBackgroundColor(BACKGROUND);
+		panel.setBackgroundColor(panelBackground.get(BACKGROUND));
 		panel.getChildren().add(TitleComponent.builder()
 			.text(hovered.getDisplayName())
 			.color(Color.WHITE)

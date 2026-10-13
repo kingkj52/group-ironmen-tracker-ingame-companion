@@ -29,10 +29,15 @@ import javax.inject.Inject;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.Client;
 import net.runelite.api.GameState;
+import net.runelite.api.Menu;
+import net.runelite.api.MenuAction;
+import net.runelite.api.MenuEntry;
 import net.runelite.api.Player;
+import net.runelite.api.events.ClientTick;
 import net.runelite.api.events.GameStateChanged;
 import net.runelite.api.events.GameTick;
 import net.runelite.api.events.ItemContainerChanged;
+import net.runelite.api.events.PostMenuSort;
 import net.runelite.api.events.StatChanged;
 import net.runelite.api.events.VarbitChanged;
 import net.runelite.api.events.WidgetClosed;
@@ -42,6 +47,8 @@ import net.runelite.client.callback.ClientThread;
 import net.runelite.client.config.ConfigManager;
 import net.runelite.client.eventbus.Subscribe;
 import net.runelite.client.events.ConfigChanged;
+import net.runelite.client.events.PluginChanged;
+import net.runelite.client.events.PluginMessage;
 import net.runelite.client.input.KeyManager;
 import net.runelite.client.input.MouseManager;
 import net.runelite.client.game.ItemManager;
@@ -116,6 +123,9 @@ public class GroupIronmenCompanionPlugin extends Plugin
 	private TrackerDetector trackerDetector;
 
 	@Inject
+	private ClientInputState inputState;
+
+	@Inject
 	private GroupMapMarkers mapMarkers;
 
 	@Inject
@@ -145,7 +155,8 @@ public class GroupIronmenCompanionPlugin extends Plugin
 	@Inject
 	private GroupStatusOverlay statusOverlay;
 
-	private GroupPanel panel;
+	/** Swapped on config changes and read from the polling thread, so it must be volatile. */
+	private volatile GroupPanel panel;
 	private NavigationButton navButton;
 
 	/**
@@ -195,6 +206,7 @@ public class GroupIronmenCompanionPlugin extends Plugin
 	protected void startUp()
 	{
 		applyPalette();
+		groupState.setPollSeconds(config.pollSeconds());
 		groupState.addListener(stateListener);
 
 		overlayManager.add(bankOverlay);
@@ -254,7 +266,7 @@ public class GroupIronmenCompanionPlugin extends Plugin
 
 		bankViewer.reset();
 		uploader.reset();
-		routeTracker.stop();
+		clientThread.invoke(routeTracker::stop);
 		clientThread.invoke(mapMarkers::clear);
 		groupState.reset();
 	}
@@ -283,10 +295,12 @@ public class GroupIronmenCompanionPlugin extends Plugin
 
 			try
 			{
+				// Noted before the cursor, so a reset between the two reads still drops the reply.
+				int generation = groupState.getGeneration();
 				MemberDto[] response = api.getGroupData(groupState.getFromTime());
 				if (response != null)
 				{
-					groupState.applyUpdate(response);
+					groupState.applyUpdate(response, generation);
 					setStatus(describeConnection());
 				}
 			}
@@ -301,6 +315,12 @@ public class GroupIronmenCompanionPlugin extends Plugin
 		catch (Exception e)
 		{
 			log.warn("Group Ironmen Tracker In-Game Companion: poll failed", e);
+		}
+		catch (Error e)
+		{
+			// Anything escaping a scheduled task cancels every later run, silently, which left
+			// the group frozen and everyone drifting to offline. Log it and keep polling.
+			log.error("Group Ironmen Tracker In-Game Companion: poll failed", e);
 		}
 	}
 
@@ -356,6 +376,7 @@ public class GroupIronmenCompanionPlugin extends Plugin
 	@Subscribe
 	public void onGameStateChanged(GameStateChanged event)
 	{
+		inputState.setLoggedIn(event.getGameState() == GameState.LOGGED_IN);
 		if (event.getGameState() == GameState.LOGIN_SCREEN || event.getGameState() == GameState.HOPPING)
 		{
 			localPlayerName = null;
@@ -371,9 +392,12 @@ public class GroupIronmenCompanionPlugin extends Plugin
 		String name = local == null ? null : local.getName();
 		if (name != null && !name.equals(localPlayerName))
 		{
+			// Reset before publishing the new name, or a flush in between could post what
+			// was staged for the previous character under this one's name.
+			uploader.reset();
 			localPlayerName = name;
 			groupState.setLocalPlayerName(name);
-			uploader.reset();
+			uploader.snapshot();
 		}
 
 		uploader.onVitalsChanged();
@@ -395,11 +419,72 @@ public class GroupIronmenCompanionPlugin extends Plugin
 
 		// Markers are rebuilt immediately whenever group data changes. This periodic pass
 		// only exists so members ageing into the offline threshold drop off on their own.
+		// The side panel's online state and "last seen" times age the same way.
 		if (++ticksSinceMapRefresh >= MAP_REFRESH_TICKS)
 		{
 			ticksSinceMapRefresh = 0;
 			mapMarkers.refresh();
+
+			GroupPanel current = panel;
+			if (current != null)
+			{
+				current.refreshMembersIfShown();
+			}
 		}
+	}
+
+	@Subscribe
+	public void onClientTick(ClientTick event)
+	{
+		inputState.setLoggedIn(client.getGameState() == GameState.LOGGED_IN);
+		inputState.setMenuOpen(client.isMenuOpen());
+	}
+
+	/**
+	 * Leaves only Cancel in the game's menu while the mouse is over the group bank window or
+	 * its Group tab. The game builds its menu from whatever is under the mouse in the scene,
+	 * so without this, hovering an item in the window showed "Enter Portal" or "Walk here"
+	 * for whatever stood behind it, and a right-click offered those options. Nothing is ever
+	 * added, and nothing changes while the menu is open or the mouse is anywhere else.
+	 */
+	@Subscribe
+	public void onPostMenuSort(PostMenuSort event)
+	{
+		if (client.isMenuOpen())
+		{
+			return;
+		}
+		net.runelite.api.Point mouse = client.getMouseCanvasPosition();
+		if (mouse == null || !bankInput.covers(new java.awt.Point(mouse.getX(), mouse.getY())))
+		{
+			return;
+		}
+
+		Menu menu = client.getMenu();
+		MenuEntry[] entries = menu.getMenuEntries();
+		int kept = 0;
+		for (MenuEntry entry : entries)
+		{
+			if (entry.getType() == MenuAction.CANCEL)
+			{
+				kept++;
+			}
+		}
+		if (kept == entries.length)
+		{
+			return;
+		}
+
+		MenuEntry[] cancelOnly = new MenuEntry[kept];
+		int i = 0;
+		for (MenuEntry entry : entries)
+		{
+			if (entry.getType() == MenuAction.CANCEL)
+			{
+				cancelOnly[i++] = entry;
+			}
+		}
+		menu.setMenuEntries(cancelOnly);
 	}
 
 	@Subscribe
@@ -441,8 +526,26 @@ public class GroupIronmenCompanionPlugin extends Plugin
 	}
 
 	@Subscribe
+	public void onPluginMessage(PluginMessage event)
+	{
+		routeTracker.onPluginMessage(event);
+	}
+
+	@Subscribe
+	public void onPluginChanged(PluginChanged event)
+	{
+		// The tracker may have just started or stopped; don't wait out the detector's cache.
+		trackerDetector.invalidate();
+	}
+
+	@Subscribe
 	public void onConfigChanged(ConfigChanged event)
 	{
+		if (GroupApi.TRACKER_CONFIG_GROUP.equals(event.getGroup()))
+		{
+			onTrackerConfigChanged(event.getKey());
+			return;
+		}
 		if (!GroupIronmenCompanionConfig.GROUP.equals(event.getGroup()))
 		{
 			return;
@@ -453,9 +556,11 @@ public class GroupIronmenCompanionPlugin extends Plugin
 			case "groupName":
 			case "groupToken":
 			case "baseUrlOverride":
-				groupState.reset();
-				uploader.reset();
-				lastPollMillis = 0;
+				resetConnection();
+				break;
+
+			case "pollSeconds":
+				groupState.setPollSeconds(config.pollSeconds());
 				break;
 
 			case "showSidePanel":
@@ -474,6 +579,11 @@ public class GroupIronmenCompanionPlugin extends Plugin
 				{
 					bankInput.closeAll();
 				}
+				break;
+
+			case "natureRuneCost":
+				// The All tab's order and the footer total are worked out when rows are built.
+				bankViewer.markDirty();
 				break;
 
 			case "worldMapMarkers":
@@ -512,6 +622,33 @@ public class GroupIronmenCompanionPlugin extends Plugin
 				}
 				break;
 		}
+	}
+
+	/**
+	 * The tracker's settings decide whether it uploads, and they are the credentials used
+	 * when this plugin's own are blank, so a change there matters as much as one here.
+	 */
+	private void onTrackerConfigChanged(String key)
+	{
+		trackerDetector.invalidate();
+		switch (key)
+		{
+			case "groupName":
+			case "groupToken":
+			case "baseUrlOverride":
+				resetConnection();
+				break;
+			default:
+				break;
+		}
+	}
+
+	/** Starts over with whichever group the settings now point at, fetching it in full. */
+	private void resetConnection()
+	{
+		groupState.reset();
+		uploader.reset();
+		lastPollMillis = 0;
 	}
 
 	// ------------------------------------------------------------------

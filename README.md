@@ -87,8 +87,8 @@ the in-game views populate from what the tracker is already uploading.
 Everyone in the group needs *something* uploading their character data for any of this to
 have anything to show.
 
-- If the official **Group Ironmen Tracker** plugin is installed and enabled, it does the
-  uploading and this plugin only reads. The two never both upload.
+- If the official **Group Ironmen Tracker** plugin is running with a group name and token set,
+  it does the uploading and this plugin only reads. The two never both upload.
 - If it is not, this plugin uploads the same fields in the same format, so the website keeps
   working either way. Collection log progress is the one thing it does not collect; install
   the tracker plugin if your group wants that.
@@ -117,6 +117,9 @@ bar, so this plugin is built to stay clearly inside
 - **No menu entries.** The plugin never calls `createMenuEntry` or `Overlay.addMenuEntry`.
   Nothing it draws can cause an action to be sent to the server, which is the guidelines'
   actual prohibition on menus. Everything clickable belongs to the plugin's own overlays.
+  While the mouse is over the group bank window or its Group tab, the game's own options for
+  whatever is behind the window are removed, leaving only Cancel, so the window never shows
+  or offers actions on the scene behind it. Nothing is ever added.
 - **No interface modification.** No game widget is created, hidden, unhidden, reparented,
   moved or resized, and no click zone is changed. Game widgets are read for their on-screen
   bounds only - to know which skill the mouse is over, and where the bank window sits so the

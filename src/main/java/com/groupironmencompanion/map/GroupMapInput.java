@@ -1,5 +1,6 @@
 package com.groupironmencompanion.map;
 
+import com.groupironmencompanion.ClientInputState;
 import com.groupironmencompanion.GroupIronmenCompanionConfig;
 import com.groupironmencompanion.data.GroupMember;
 import com.groupironmencompanion.data.GroupState;
@@ -23,6 +24,9 @@ import net.runelite.client.input.MouseAdapter;
 @Singleton
 public class GroupMapInput extends MouseAdapter
 {
+	/** The mouse buttons whose press was swallowed here, one bit per button. */
+	private int swallowedButtons;
+
 	@Inject
 	private GroupMapOverlay overlay;
 
@@ -38,10 +42,14 @@ public class GroupMapInput extends MouseAdapter
 	@Inject
 	private ClientThread clientThread;
 
+	@Inject
+	private ClientInputState inputState;
+
 	@Override
 	public MouseEvent mousePressed(MouseEvent event)
 	{
-		if (!config.mapPanel() || event.isAltDown())
+		// While the game's right-click menu is open, a click is picking one of its options.
+		if (!config.mapPanel() || event.isAltDown() || !inputState.isLoggedIn() || inputState.isMenuOpen())
 		{
 			return event;
 		}
@@ -75,6 +83,7 @@ public class GroupMapInput extends MouseAdapter
 			overlay.jumpTo(member);
 		});
 
+		swallowedButtons |= buttonBit(event);
 		event.consume();
 		return event;
 	}
@@ -82,21 +91,31 @@ public class GroupMapInput extends MouseAdapter
 	@Override
 	public MouseEvent mouseClicked(MouseEvent event)
 	{
-		return swallowOnRow(event);
-	}
-
-	@Override
-	public MouseEvent mouseReleased(MouseEvent event)
-	{
-		return swallowOnRow(event);
-	}
-
-	private MouseEvent swallowOnRow(MouseEvent event)
-	{
-		if (config.mapPanel() && !event.isAltDown() && overlay.memberAt(event.getPoint()) != null)
+		if ((swallowedButtons & buttonBit(event)) != 0)
 		{
 			event.consume();
 		}
 		return event;
+	}
+
+	/**
+	 * Only a release whose press was swallowed here is swallowed too: one that began on the
+	 * game, such as the end of a middle-button camera drag, must reach the game wherever it
+	 * lands, or the game never hears the button come up.
+	 */
+	@Override
+	public MouseEvent mouseReleased(MouseEvent event)
+	{
+		if ((swallowedButtons & buttonBit(event)) != 0)
+		{
+			swallowedButtons &= ~buttonBit(event);
+			event.consume();
+		}
+		return event;
+	}
+
+	private static int buttonBit(MouseEvent event)
+	{
+		return 1 << Math.max(0, Math.min(event.getButton(), 30));
 	}
 }

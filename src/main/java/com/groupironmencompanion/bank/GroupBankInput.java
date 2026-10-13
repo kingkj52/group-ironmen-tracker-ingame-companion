@@ -1,5 +1,6 @@
 package com.groupironmencompanion.bank;
 
+import com.groupironmencompanion.ClientInputState;
 import com.groupironmencompanion.GroupIronmenCompanionConfig;
 import java.awt.Rectangle;
 import java.awt.event.MouseEvent;
@@ -8,6 +9,7 @@ import javax.inject.Inject;
 import javax.inject.Singleton;
 import net.runelite.client.callback.ClientThread;
 import net.runelite.client.game.chatbox.ChatboxPanelManager;
+import net.runelite.client.game.chatbox.ChatboxTextInput;
 import net.runelite.client.input.MouseAdapter;
 import net.runelite.client.input.MouseWheelListener;
 
@@ -42,8 +44,22 @@ public class GroupBankInput extends MouseAdapter implements MouseWheelListener
 	@Inject
 	private ChatboxPanelManager chatboxPanelManager;
 
+	@Inject
+	private ClientInputState inputState;
+
 	/** Set while the scrollbar is being dragged, so movement keeps scrolling after the press. */
 	private boolean draggingScrollbar;
+
+	/**
+	 * The mouse buttons whose press this window swallowed, one bit per button. A release or
+	 * click is only swallowed when its press was: one that began on the game, such as the end
+	 * of a middle-button camera drag, must reach the game wherever it lands, or the game never
+	 * hears the button come up and keeps turning the camera.
+	 */
+	private int swallowedButtons;
+
+	/** The search prompt this window opened, so closing it never closes anyone else's. */
+	private ChatboxTextInput searchInput;
 
 	// ------------------------------------------------------------------
 	// Mouse
@@ -52,14 +68,15 @@ public class GroupBankInput extends MouseAdapter implements MouseWheelListener
 	@Override
 	public MouseEvent mousePressed(MouseEvent event)
 	{
-		if (!config.bankViewer())
+		if (!config.bankViewer() || !inputState.isLoggedIn())
 		{
 			return event;
 		}
 
 		// Alt is RuneLite's overlay drag modifier; leave those clicks alone so the window
-		// stays repositionable like any other overlay.
-		if (event.isAltDown())
+		// stays repositionable like any other overlay. A click while the game's right-click
+		// menu is open is picking an option from it, which is drawn over the window.
+		if (event.isAltDown() || inputState.isMenuOpen())
 		{
 			return event;
 		}
@@ -75,9 +92,9 @@ public class GroupBankInput extends MouseAdapter implements MouseWheelListener
 			}
 			else
 			{
-				viewer.setOpen(false);
+				closeAll();
 			}
-			event.consume();
+			swallow(event);
 			return event;
 		}
 
@@ -99,8 +116,9 @@ public class GroupBankInput extends MouseAdapter implements MouseWheelListener
 		if (hits.scrollbar.contains(point))
 		{
 			draggingScrollbar = true;
-			viewer.setScrollRow(overlay.scrollRowForY(point.y));
-			event.consume();
+			int row = overlay.scrollRowForY(point.y);
+			clientThread.invoke(() -> viewer.setScrollRow(row));
+			swallow(event);
 			return event;
 		}
 
@@ -111,7 +129,7 @@ public class GroupBankInput extends MouseAdapter implements MouseWheelListener
 				closeSearch();
 				viewer.setOpen(false);
 			});
-			event.consume();
+			swallow(event);
 			return event;
 		}
 
@@ -119,9 +137,12 @@ public class GroupBankInput extends MouseAdapter implements MouseWheelListener
 		{
 			if (hit.bounds.contains(point))
 			{
-				viewer.setActiveTab(hit.tab);
-				clientThread.invoke(this::closeSearch);
-				event.consume();
+				clientThread.invoke(() ->
+				{
+					viewer.setActiveTab(hit.tab);
+					closeSearch();
+				});
+				swallow(event);
 				return event;
 			}
 		}
@@ -140,21 +161,30 @@ public class GroupBankInput extends MouseAdapter implements MouseWheelListener
 		});
 
 		// Swallow anything else inside the window so clicks do not fall through to the game.
-		event.consume();
+		swallow(event);
 		return event;
 	}
 
 	@Override
 	public MouseEvent mouseClicked(MouseEvent event)
 	{
-		return swallowInsideWindow(event);
+		if (isSwallowed(event))
+		{
+			event.consume();
+		}
+		return event;
 	}
 
 	@Override
 	public MouseEvent mouseReleased(MouseEvent event)
 	{
 		draggingScrollbar = false;
-		return swallowInsideWindow(event);
+		if (isSwallowed(event))
+		{
+			swallowedButtons &= ~buttonBit(event);
+			event.consume();
+		}
+		return event;
 	}
 
 	@Override
@@ -172,37 +202,68 @@ public class GroupBankInput extends MouseAdapter implements MouseWheelListener
 
 		// Track the pointer even once it leaves the bar, which is how scrollbars behave
 		// everywhere else; the row is clamped, so dragging past either end just pins it.
-		viewer.setScrollRow(overlay.scrollRowForY(event.getY()));
+		int row = overlay.scrollRowForY(event.getY());
+		clientThread.invoke(() -> viewer.setScrollRow(row));
 		event.consume();
 		return event;
 	}
 
-	private MouseEvent swallowInsideWindow(MouseEvent event)
+	/**
+	 * Whether a canvas point is on the group bank window or its Group tab, where the game's own
+	 * menu options for whatever lies behind them must not show.
+	 */
+	public boolean covers(java.awt.Point point)
 	{
-		if (config.bankViewer() && viewer.isOpen() && !event.isAltDown()
-			&& overlay.getHits().window.contains(event.getPoint()))
+		if (!config.bankViewer() || !inputState.isLoggedIn())
 		{
-			event.consume();
+			return false;
 		}
-		return event;
+		Rectangle tab = tabOverlay.getHit();
+		if (tab != null && tab.contains(point))
+		{
+			return true;
+		}
+		return viewer.isOpen() && overlay.getHits().window.contains(point);
+	}
+
+	/** Swallows a press, remembering its button so the matching release is swallowed too. */
+	private void swallow(MouseEvent event)
+	{
+		swallowedButtons |= buttonBit(event);
+		event.consume();
+	}
+
+	private boolean isSwallowed(MouseEvent event)
+	{
+		return (swallowedButtons & buttonBit(event)) != 0;
+	}
+
+	private static int buttonBit(MouseEvent event)
+	{
+		return 1 << Math.max(0, Math.min(event.getButton(), 30));
 	}
 
 	@Override
 	public MouseWheelEvent mouseWheelMoved(MouseWheelEvent event)
 	{
-		if (!config.bankViewer() || !viewer.isOpen())
+		if (!config.bankViewer() || !viewer.isOpen() || !inputState.isLoggedIn())
 		{
 			return event;
 		}
-		if (!overlay.getHits().grid.contains(event.getPoint()))
+		// Anywhere in the window, not only over the grid: a turn over the title, the tabs or
+		// the search box otherwise fell through to the game and zoomed the camera.
+		if (!overlay.getHits().window.contains(event.getPoint()))
 		{
 			return event;
 		}
 
-		int rows = Math.max(1, viewer.getRows().size());
-		int maxScroll = Math.max(0, rows - GroupBankOverlay.VISIBLE_ROWS);
-		int next = viewer.getScrollRow() + (event.getWheelRotation() > 0 ? SCROLL_ROWS : -SCROLL_ROWS);
-		viewer.setScrollRow(Math.max(0, Math.min(maxScroll, next)));
+		int step = event.getWheelRotation() > 0 ? SCROLL_ROWS : -SCROLL_ROWS;
+		clientThread.invoke(() ->
+		{
+			int rows = Math.max(1, viewer.getRows().size());
+			int maxScroll = Math.max(0, rows - GroupBankOverlay.VISIBLE_ROWS);
+			viewer.setScrollRow(Math.max(0, Math.min(maxScroll, viewer.getScrollRow() + step)));
+		});
 
 		event.consume();
 		return event;
@@ -227,39 +288,32 @@ public class GroupBankInput extends MouseAdapter implements MouseWheelListener
 	private void openSearch()
 	{
 		viewer.setSearchFocused(true);
-		chatboxPanelManager.openTextInput("Search group bank")
+		searchInput = chatboxPanelManager.openTextInput("Search group bank")
 			.value(viewer.getFilter())
 			.onChanged(value -> viewer.setFilter(value.trim()))
 			.onClose(() -> viewer.setSearchFocused(false))
 			.build();
 	}
 
-	/** Closes the search prompt if it is the thing currently open. */
+	/**
+	 * Closes the search prompt if it is the thing currently open. The chatbox may have been
+	 * taken over since, by a Withdraw-X amount, the bank's own search or another plugin's
+	 * prompt, and closing that would throw away whatever the player was typing.
+	 */
 	private void closeSearch()
 	{
-		if (viewer.isSearchFocused())
+		viewer.setSearchFocused(false);
+		if (searchInput != null && chatboxPanelManager.getCurrentInput() == searchInput)
 		{
-			viewer.setSearchFocused(false);
 			chatboxPanelManager.close();
 		}
+		searchInput = null;
 	}
 
 	// ------------------------------------------------------------------
 	// Helpers
 	// ------------------------------------------------------------------
 
-	/**
-	 * Opens the window, placing it only if the user has never moved it.
-	 * <p>
-	 * The window is opened first and unconditionally, because this is called from the AWT
-	 * thread (the hotkey and the Group tab) as well as from game events. Working out where to
-	 * put it means reading the bank widget, which is only legal on the client thread, so that
-	 * part hops threads. Doing it inline was why the hotkey and the tab appeared to do
-	 * nothing: the client call threw before the window was ever opened.
-	 * <p>
-	 * A remembered position always wins. RuneLite persists it when you alt-drag the overlay
-	 * and restores it on startup, so re-docking on every open would throw that away.
-	 */
 	/**
 	 * Closes the window and any search prompt with it. Safe to call from any thread, so the
 	 * hotkey and the game events that dismiss the window can share one path.
@@ -273,20 +327,29 @@ public class GroupBankInput extends MouseAdapter implements MouseWheelListener
 		});
 	}
 
+	/**
+	 * Opens the window, placing it only if the user has never moved it.
+	 * <p>
+	 * This is called from the AWT thread (the hotkey and the Group tab) as well as from game
+	 * events, so all of it hops to the client thread. The viewer's state is only changed
+	 * there, where it is drawn from, and working out where to put the window means reading
+	 * the bank widget, which is only legal there. Doing that inline was why the hotkey and
+	 * the tab once appeared to do nothing: the client call threw before the window opened.
+	 * <p>
+	 * A remembered position always wins. RuneLite persists it when you alt-drag the overlay
+	 * and restores it on startup, so re-docking on every open would throw that away.
+	 */
 	public void openBesideBank()
 	{
-		viewer.setOpen(true);
-
-		if (overlay.getPreferredLocation() == null)
+		clientThread.invoke(() ->
 		{
-			clientThread.invoke(() ->
+			viewer.setOpen(true);
+
+			if (overlay.getPreferredLocation() == null)
 			{
-				if (overlay.getPreferredLocation() == null)
-				{
-					overlay.setPreferredLocation(tabOverlay.defaultLocation(
-						GroupBankOverlay.WIDTH, overlay.getWindowSize().height));
-				}
-			});
-		}
+				overlay.setPreferredLocation(tabOverlay.defaultLocation(
+					GroupBankOverlay.WIDTH, overlay.getWindowSize().height));
+			}
+		});
 	}
 }

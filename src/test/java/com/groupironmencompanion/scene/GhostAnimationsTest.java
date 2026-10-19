@@ -82,6 +82,17 @@ public class GhostAnimationsTest
 		assertEquals(AnimationID.HUMAN_READY, GhostAnimations.poseFor(Activity.FIGHTING));
 	}
 
+	@Test
+	public void anActionRepeatsOnAWeaponSpeedCadenceRatherThanLooping()
+	{
+		// Looping the swing was the first attempt and it reads as a member who never stops
+		// mid-attack. Four ticks is the common weapon speed, and the gap between swings is
+		// what makes the figure look like it is fighting rather than vibrating.
+		assertTrue("an action must have a gap between repeats",
+			GhostAnimations.ACTION_INTERVAL_TICKS > 1);
+		assertEquals(4, GhostAnimations.ACTION_INTERVAL_TICKS);
+	}
+
 	// ------------------------------------------------------------------
 	// Weapon classification
 	// ------------------------------------------------------------------

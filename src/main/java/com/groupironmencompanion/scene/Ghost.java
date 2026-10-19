@@ -77,6 +77,9 @@ class Ghost
 	 */
 	private int poseId = -1;
 	private int actionId = -1;
+
+	/** Game ticks left before the action animation is played again. */
+	private int ticksUntilAction;
 	private Model model;
 
 	/** Whether the drawn position is out of step with {@link #x} and {@link #y}. */
@@ -190,9 +193,13 @@ class Ghost
 	 * {@link RuneLiteObject} keeps the two separate, which maps exactly onto the inference:
 	 * locomotion is a pose, swinging or gathering is an action, and a member can be doing one
 	 * while in the other.
+	 * <p>
+	 * The pose loops, because standing and walking are continuous. The action does not: it is
+	 * one swing, played on a cadence by {@link #onGameTick()}, so the figure settles back into
+	 * its pose in between.
 	 *
 	 * @param poseId   locomotion or idle animation
-	 * @param actionId the action to play, or -1 for none
+	 * @param actionId the action to repeat, or -1 for none
 	 */
 	void setAnimation(int poseId, int actionId)
 	{
@@ -201,11 +208,43 @@ class Ghost
 			this.poseId = poseId;
 			object.setPoseAnimationController(looping(poseId));
 		}
+
 		if (actionId != this.actionId)
 		{
 			this.actionId = actionId;
-			object.setAnimationController(actionId < 0 ? null : looping(actionId));
+			object.setAnimationController(null);
+			// Start the new action on the next tick rather than waiting out the interval left
+			// over from the last one, so a member who starts fighting swings straight away.
+			ticksUntilAction = 0;
 		}
+	}
+
+	/**
+	 * Advances the action cadence. Called once per game tick on the client thread.
+	 * <p>
+	 * Separate from {@link #advance()}, which runs per frame: a swing every four game ticks is
+	 * a thing to count in ticks, and counting it in frames would tie how often a member
+	 * attacks to how fast the client happens to be drawing.
+	 */
+	void onGameTick()
+	{
+		if (actionId < 0)
+		{
+			return;
+		}
+
+		if (--ticksUntilAction > 0)
+		{
+			return;
+		}
+
+		ticksUntilAction = GhostAnimations.ACTION_INTERVAL_TICKS;
+
+		// Deliberately not looping. The controller clears itself when the swing finishes,
+		// which lets the pose underneath show through until the next one.
+		AnimationController controller = new AnimationController(client, actionId);
+		controller.setOnFinished(finished -> object.setAnimationController(null));
+		object.setAnimationController(controller);
 	}
 
 	/**

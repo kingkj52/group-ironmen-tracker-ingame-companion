@@ -240,6 +240,7 @@ public class GroupScenePresence
 		Activity activity = resolveActivity(member, trail, ghost);
 		WeaponClass weapon = weaponOf(member);
 		ghost.setAnimation(GhostAnimations.poseFor(activity), GhostAnimations.actionFor(activity, weapon));
+		ghost.onGameTick();
 
 		updateInteraction(view, member, position, local, transparency, ghost, activity);
 	}

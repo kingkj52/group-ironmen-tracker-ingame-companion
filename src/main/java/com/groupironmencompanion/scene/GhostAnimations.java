@@ -20,6 +20,22 @@ import net.runelite.api.gameval.AnimationID;
  */
 final class GhostAnimations
 {
+	/**
+	 * Game ticks between repeats of an action animation.
+	 * <p>
+	 * An action is a single swing, cast or swipe, not a continuous motion, so it plays once
+	 * and the figure returns to its pose until the next one. Looping it instead produces a
+	 * member who never stops mid-swing, which is the one thing nobody in the game ever looks
+	 * like.
+	 * <p>
+	 * Four ticks is the common weapon speed and close enough for most gathering actions too.
+	 * The true interval varies per weapon and is in the cache, but deriving it would be effort
+	 * spent on precision the feed cannot support: positions and targets arrive about once a
+	 * second, so a ghost's swings were never going to land in step with its owner's. The point
+	 * is a figure that reads as fighting, not a reconstruction of the fight.
+	 */
+	static final int ACTION_INTERVAL_TICKS = 4;
+
 	/** What a member appears to be doing, in the order the renderer resolves it. */
 	enum Activity
 	{

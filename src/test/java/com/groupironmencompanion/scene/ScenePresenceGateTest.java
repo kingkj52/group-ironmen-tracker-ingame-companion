@@ -48,6 +48,21 @@ public class ScenePresenceGateTest
 	}
 
 	@Test
+	public void inheritsRuneLitesOwnIdeaOfAPvpWorld()
+	{
+		// The explicit list cannot know about a world type added upstream later, so whatever
+		// RuneLite itself counts as PvP must be refused too.
+		for (WorldType type : WorldType.values())
+		{
+			if (WorldType.isPvpWorld(EnumSet.of(type)))
+			{
+				assertTrue(type + " is a PvP world to RuneLite and must suppress ghosts",
+					ScenePresenceGate.isForbiddenWorld(EnumSet.of(type)));
+			}
+		}
+	}
+
+	@Test
 	public void refusesWhenTheWorldIsNotKnownYet()
 	{
 		// Logging in, hopping, or any state where the client has not said what this world is.

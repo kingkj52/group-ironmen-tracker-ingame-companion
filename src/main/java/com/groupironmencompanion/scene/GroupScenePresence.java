@@ -10,6 +10,7 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -17,6 +18,7 @@ import javax.annotation.Nullable;
 import javax.inject.Inject;
 import javax.inject.Singleton;
 import net.runelite.api.Client;
+import net.runelite.api.Constants;
 import net.runelite.api.EquipmentInventorySlot;
 import net.runelite.api.NPC;
 import net.runelite.api.WorldView;
@@ -50,6 +52,17 @@ public class GroupScenePresence
 	 */
 	private static final int INTERACTION_MAX_TILES = 12;
 
+	/**
+	 * Upper bound on the remembered name-to-id and weapon lookups.
+	 * <p>
+	 * Both are keyed by values that ultimately come from the group's server, so neither may
+	 * grow without limit on the strength of what a server chooses to send. The real number of
+	 * distinct NPCs and weapons a group meets in a session is far below this; the cap exists
+	 * so that a server sending nonsense costs a bounded amount of memory rather than an
+	 * unbounded one.
+	 */
+	private static final int LOOKUP_CACHE_LIMIT = 256;
+
 	@Inject
 	private Client client;
 
@@ -75,10 +88,25 @@ public class GroupScenePresence
 	private final Map<String, Ghost> npcGhosts = new HashMap<>();
 
 	/** Per-member motion and activity history, used to infer what they are doing. */
-	private final Map<String, Trail> trails = new HashMap<>();
+	private final Map<String, MemberTrail> trails = new HashMap<>();
+
+	/**
+	 * NPC name to id, remembered across ticks.
+	 * <p>
+	 * Resolving a name means walking the scene's NPC list, which with several members fighting
+	 * would be that walk per member per tick. The mapping does not change once learned, so in
+	 * the steady state this costs a hash lookup and the scan never runs again.
+	 */
+	private final Map<String, Integer> npcIdByName = new HashMap<>();
+
+	/** Weapon category by item id, so a name is classified once rather than every tick. */
+	private final Map<Integer, WeaponClass> weaponClasses = new HashMap<>();
 
 	/** Published for the hover label overlay, which runs on the client thread too. */
 	private volatile List<Ghost> visible = Collections.emptyList();
+
+	/** Monotonic tick counter, so speed can be measured between real position changes. */
+	private int tickCounter;
 
 	/**
 	 * Rebuilds the set of figures and decides what each is doing. Called once per game tick on
@@ -99,6 +127,8 @@ public class GroupScenePresence
 			return;
 		}
 
+		tickCounter++;
+
 		int transparency = config.scenePresenceTransparency();
 		Set<String> present = new HashSet<>();
 
@@ -116,7 +146,7 @@ public class GroupScenePresence
 			}
 
 			LocalPoint local = LocalPoint.fromWorld(view, position);
-			if (!inScene(view, local))
+			if (!drawable(view, local, position.getPlane()))
 			{
 				// Outside the loaded scene, so there is nowhere on screen to draw them. This
 				// is the test that keeps the feature to "people who would be visible anyway".
@@ -167,11 +197,13 @@ public class GroupScenePresence
 		visible = Collections.emptyList();
 	}
 
-	/** Drops cached models as well, after a settings change. Client thread only. */
+	/** Drops cached models and lookups as well, after a settings change. Client thread only. */
 	public void reset()
 	{
 		clear();
 		models.clear();
+		npcIdByName.clear();
+		weaponClasses.clear();
 	}
 
 	// ------------------------------------------------------------------
@@ -186,20 +218,20 @@ public class GroupScenePresence
 		Ghost ghost = memberGhosts.get(name);
 		if (ghost == null)
 		{
-			ghost = new Ghost(client, view, name, local, position.getPlane());
+			ghost = new Ghost(client, name, local, position.getPlane());
+			ghost.setLabel(name);
 			memberGhosts.put(name, ghost);
 		}
 
 		ghost.setModel(models.member(transparency));
 		ghost.moveTo(local, position.getPlane());
 
-		Trail trail = trails.computeIfAbsent(name, key -> new Trail());
-		Activity activity = resolveActivity(member, position, trail);
-		trail.record(position, member.getTotalXp());
+		MemberTrail trail = trails.computeIfAbsent(name, key -> new MemberTrail());
+		trail.observe(position, tickCounter);
 
+		Activity activity = resolveActivity(member, trail, ghost);
 		WeaponClass weapon = weaponOf(member);
 		ghost.setAnimation(GhostAnimations.poseFor(activity), GhostAnimations.actionFor(activity, weapon));
-		ghost.setLabel(name);
 
 		updateInteraction(view, member, position, local, transparency, ghost, activity);
 	}
@@ -207,17 +239,23 @@ public class GroupScenePresence
 	/**
 	 * Decides what a member appears to be doing, in priority order.
 	 * <p>
-	 * Movement first, because a member fighting while moving is kiting and the walk reads
-	 * better than a swing. Then a live interaction, which is a direct observation. Then
-	 * experience gained since the last tick, which is only a hint, and only used when they are
-	 * standing still and not fighting anything.
+	 * Movement is judged by whether the figure still has ground to cover rather than by
+	 * whether new data arrived this tick, because data arrives more slowly than this runs.
+	 * Judging it from the data directly makes a running member flicker between running and
+	 * standing on alternate ticks. Then a live interaction, which is a direct observation.
+	 * Then experience gained, which is only a hint, and only consulted when they are standing
+	 * still and fighting nothing.
 	 */
-	private Activity resolveActivity(GroupMember member, WorldPoint position, Trail trail)
+	private Activity resolveActivity(GroupMember member, MemberTrail trail, Ghost ghost)
 	{
-		Activity movement = trail.movementSince(position);
-		if (movement != Activity.IDLE)
+		// Sampled every tick regardless of the outcome, because it is a delta: skipping the
+		// read when the member is moving would make the next one compare against a stale total
+		// and report a gain they did not just make.
+		boolean gainedXp = trail.gainedXp(member.getTotalXp());
+
+		if (ghost.isMoving())
 		{
-			return movement;
+			return trail.getMovement();
 		}
 
 		GroupMember.Interaction interaction = member.getInteraction();
@@ -226,12 +264,7 @@ public class GroupScenePresence
 			return Activity.FIGHTING;
 		}
 
-		if (trail.gainedXpSince(member.getTotalXp()))
-		{
-			return Activity.GATHERING;
-		}
-
-		return Activity.IDLE;
+		return gainedXp ? Activity.GATHERING : Activity.IDLE;
 	}
 
 	/**
@@ -263,7 +296,7 @@ public class GroupScenePresence
 		}
 
 		LocalPoint targetLocal = LocalPoint.fromWorld(view, target);
-		if (!inScene(view, targetLocal))
+		if (!drawable(view, targetLocal, target.getPlane()))
 		{
 			retireNpc(name);
 			return;
@@ -273,7 +306,7 @@ public class GroupScenePresence
 		// position is worth carrying even when the opponent itself is not drawn.
 		ghost.faceTowards(targetLocal);
 
-		Integer npcId = findNpcIdByName(view, interaction.getName());
+		Integer npcId = resolveNpcId(view, interaction.getName());
 		if (npcId == null)
 		{
 			retireNpc(name);
@@ -283,7 +316,7 @@ public class GroupScenePresence
 		Ghost opponent = npcGhosts.get(name);
 		if (opponent == null)
 		{
-			opponent = new Ghost(client, view, name, targetLocal, target.getPlane());
+			opponent = new Ghost(client, name, targetLocal, target.getPlane());
 			npcGhosts.put(name, opponent);
 		}
 
@@ -294,14 +327,20 @@ public class GroupScenePresence
 	}
 
 	/**
-	 * Whether a converted position actually falls inside the scene the client has loaded.
+	 * Whether a reported position is one this plugin is willing to draw at.
 	 * <p>
-	 * This is the test that keeps the feature to members who would be on screen anyway, and it
-	 * is why a member on the other side of the map costs nothing but a comparison.
+	 * Two jobs. The scene bounds keep the feature to members who would be on screen anyway,
+	 * which is why a member on the other side of the map costs nothing but a comparison.
+	 * <p>
+	 * The plane check is the more important one, because it is a trust boundary. Coordinates
+	 * arrive from the group's server and are stored exactly as sent, so the plane is whatever
+	 * a server chose to put in the third slot of an array. It then reaches the client's own
+	 * scene code, which indexes by it. Anything outside the four real planes is refused here
+	 * rather than handed down.
 	 */
-	private static boolean inScene(WorldView view, @Nullable LocalPoint point)
+	private static boolean drawable(WorldView view, @Nullable LocalPoint point, int plane)
 	{
-		if (point == null)
+		if (point == null || !isRealPlane(plane))
 		{
 			return false;
 		}
@@ -311,22 +350,43 @@ public class GroupScenePresence
 	}
 
 	/**
-	 * The id of an NPC in the local scene with this name, or null when there is none.
+	 * Whether a plane is one the game actually has.
+	 * <p>
+	 * Separated out so the rule can be tested without a scene, because it is the one place
+	 * this feature guards a value that came off the wire before passing it to the client.
+	 */
+	static boolean isRealPlane(int plane)
+	{
+		return plane >= 0 && plane < Constants.MAX_Z;
+	}
+
+	/**
+	 * The id of an NPC with this name, from the remembered mapping or by scanning the scene.
 	 * <p>
 	 * Names are not unique to an id, but any NPC sharing the name shares the model, which is
-	 * all this is for.
+	 * all this is for. A name that cannot be resolved is deliberately not remembered, so the
+	 * scan is retried as the member's surroundings change rather than written off for the
+	 * session.
 	 */
 	@Nullable
-	private Integer findNpcIdByName(WorldView view, String name)
+	private Integer resolveNpcId(WorldView view, String name)
 	{
 		if (name == null || name.isEmpty())
 		{
 			return null;
 		}
+
+		Integer known = npcIdByName.get(name);
+		if (known != null)
+		{
+			return known;
+		}
+
 		for (NPC npc : view.npcs())
 		{
 			if (name.equals(npc.getName()))
 			{
+				remember(npcIdByName, name, npc.getId());
 				return npc.getId();
 			}
 		}
@@ -349,15 +409,35 @@ public class GroupScenePresence
 			return WeaponClass.UNARMED;
 		}
 
+		WeaponClass known = weaponClasses.get(weapon.getId());
+		if (known != null)
+		{
+			return known;
+		}
+
+		WeaponClass resolved;
 		try
 		{
-			return WeaponClass.classify(itemManager.getItemComposition(weapon.getId()).getName());
+			resolved = WeaponClass.classify(itemManager.getItemComposition(weapon.getId()).getName());
 		}
 		catch (RuntimeException e)
 		{
 			// An id the running client does not know, such as one from a newer revision.
-			return WeaponClass.UNARMED;
+			resolved = WeaponClass.UNARMED;
 		}
+
+		remember(weaponClasses, weapon.getId(), resolved);
+		return resolved;
+	}
+
+	/** Stores a lookup, clearing the whole map first if it has grown past its cap. */
+	private static <K, V> void remember(Map<K, V> cache, K key, V value)
+	{
+		if (cache.size() >= LOOKUP_CACHE_LIMIT)
+		{
+			cache.clear();
+		}
+		cache.put(key, value);
 	}
 
 	// ------------------------------------------------------------------
@@ -366,27 +446,22 @@ public class GroupScenePresence
 
 	private void retireAllExcept(Set<String> present)
 	{
-		memberGhosts.keySet().removeIf(name ->
-		{
-			if (present.contains(name))
-			{
-				return false;
-			}
-			memberGhosts.get(name).destroy();
-			return true;
-		});
-
-		npcGhosts.keySet().removeIf(name ->
-		{
-			if (present.contains(name))
-			{
-				return false;
-			}
-			npcGhosts.get(name).destroy();
-			return true;
-		});
-
+		retire(memberGhosts, present);
+		retire(npcGhosts, present);
 		trails.keySet().retainAll(present);
+	}
+
+	private static void retire(Map<String, Ghost> ghosts, Set<String> present)
+	{
+		for (Iterator<Map.Entry<String, Ghost>> it = ghosts.entrySet().iterator(); it.hasNext(); )
+		{
+			Map.Entry<String, Ghost> entry = it.next();
+			if (!present.contains(entry.getKey()))
+			{
+				entry.getValue().destroy();
+				it.remove();
+			}
+		}
 	}
 
 	private void retireNpc(String memberName)
@@ -404,35 +479,5 @@ public class GroupScenePresence
 		drawn.addAll(memberGhosts.values());
 		drawn.addAll(npcGhosts.values());
 		visible = Collections.unmodifiableList(drawn);
-	}
-
-	/** One member's recent history, enough to tell movement and training apart. */
-	private static final class Trail
-	{
-		private WorldPoint lastPosition;
-		private long lastTotalXp = -1;
-
-		/** How the move from the last recorded position to this one should be animated. */
-		Activity movementSince(WorldPoint position)
-		{
-			if (lastPosition == null || lastPosition.getPlane() != position.getPlane())
-			{
-				return Activity.IDLE;
-			}
-			double tiles = lastPosition.distanceTo2D(position);
-			// One game tick per call, since this runs on the game tick.
-			return GhostAnimations.movementFor(tiles, 1);
-		}
-
-		boolean gainedXpSince(long totalXp)
-		{
-			return lastTotalXp >= 0 && totalXp > lastTotalXp;
-		}
-
-		void record(WorldPoint position, long totalXp)
-		{
-			this.lastPosition = position;
-			this.lastTotalXp = totalXp;
-		}
 	}
 }

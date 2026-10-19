@@ -98,6 +98,16 @@ public class ScenePresenceGate
 			// than assume the safe case.
 			return true;
 		}
+
+		// Defer to RuneLite's own idea of a PvP world first, so a world type added upstream
+		// after this was written is covered without anyone remembering to come back here. The
+		// explicit list below is the belt to that pair of braces, and covers worlds that are
+		// combat contexts without being PvP in RuneLite's sense.
+		if (WorldType.isPvpWorld(types))
+		{
+			return true;
+		}
+
 		for (WorldType type : types)
 		{
 			if (FORBIDDEN_WORLDS.contains(type))

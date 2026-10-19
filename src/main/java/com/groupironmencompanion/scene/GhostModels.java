@@ -48,6 +48,9 @@ public class GhostModels
 	private static final int GHOST_HUE = 41;
 	private static final int GHOST_SATURATION = 2;
 
+	/** Most distinct figures kept built at once. */
+	private static final int CACHE_LIMIT = 32;
+
 	@Inject
 	private Client client;
 
@@ -93,6 +96,14 @@ public class GhostModels
 		Model built = build(npcId, transparency);
 		if (built != null)
 		{
+			// Each entry is a built mesh, so this is the expensive cache of the two. A group
+			// meets nowhere near this many distinct opponents in a session; the cap is here so
+			// that a long session, or a server naming things that resolve oddly, cannot grow
+			// it without bound.
+			if (cache.size() >= CACHE_LIMIT)
+			{
+				cache.clear();
+			}
 			cache.put(npcId, built);
 		}
 		return built;

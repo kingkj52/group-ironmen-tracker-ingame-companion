@@ -40,11 +40,22 @@ class Ghost
 	/** Beyond this, the figure is teleported rather than walked. */
 	private static final int SNAP_DISTANCE_TILES = 12;
 
+	/** Below one local unit of travel the figure has arrived, and easing would never finish. */
+	private static final double ARRIVED_UNITS = 1.0;
+
 	/** Roughly head height on a human model, so the label sits above the figure. */
 	private static final int LABEL_HEIGHT = 200;
 
+	/**
+	 * Longest label drawn.
+	 * <p>
+	 * Member and NPC names both arrive from the group's server, so their length is not this
+	 * plugin's to trust. A name is clipped rather than rejected: the point of the label is to
+	 * say who the figure is, and an implausible name is still worth showing the start of.
+	 */
+	private static final int MAX_LABEL_LENGTH = 24;
+
 	private final Client client;
-	private final WorldView view;
 	private final RuneLiteObject object;
 	private final String memberName;
 
@@ -58,22 +69,25 @@ class Ghost
 	private int targetY;
 
 	/**
-	 * The animations currently installed.
+	 * The animations and model currently installed.
 	 * <p>
-	 * Tracked so that an unchanged animation is left running. Reinstalling one every tick
+	 * Tracked so that unchanged ones are left alone. Reinstalling an animation every tick
 	 * would reset it to its first frame each time, which shows as a figure twitching in place
 	 * instead of a figure swinging a sword.
 	 */
 	private int poseId = -1;
 	private int actionId = -1;
+	private Model model;
+
+	/** Whether the drawn position is out of step with {@link #x} and {@link #y}. */
+	private boolean dirty = true;
 
 	private String label = "";
 
-	Ghost(Client client, WorldView view, String memberName, LocalPoint start, int plane)
+	Ghost(Client client, String memberName, LocalPoint start, int plane)
 	{
 		this.client = client;
-		this.view = view;
-		this.memberName = memberName;
+		this.memberName = clip(memberName);
 		this.x = start.getX();
 		this.y = start.getY();
 		this.targetX = start.getX();
@@ -96,13 +110,24 @@ class Ghost
 
 	void setLabel(String label)
 	{
-		this.label = label == null ? "" : label;
+		this.label = clip(label);
 	}
 
 	void setModel(@Nullable Model model)
 	{
+		if (model == this.model)
+		{
+			return;
+		}
+		this.model = model;
 		object.setModel(model);
 		object.setActive(model != null);
+	}
+
+	/** Whether the figure still has ground to cover, which is what "walking" really means. */
+	boolean isMoving()
+	{
+		return Math.abs(targetX - x) >= ARRIVED_UNITS || Math.abs(targetY - y) >= ARRIVED_UNITS;
 	}
 
 	/** Points the figure at its newest reported position. */
@@ -121,31 +146,35 @@ class Ghost
 			// across it would draw the figure sliding through everything in between.
 			this.x = targetX;
 			this.y = targetY;
+			this.dirty = true;
 		}
 	}
 
 	/**
 	 * Eases the figure toward its target and republishes its position. Called every client
 	 * tick, on the client thread.
+	 * <p>
+	 * A figure that has arrived does no work at all. Most figures are standing still most of
+	 * the time, and this runs for every one of them on every frame.
 	 */
 	void advance()
 	{
+		if (!isMoving())
+		{
+			if (dirty)
+			{
+				x = targetX;
+				y = targetY;
+				apply();
+			}
+			return;
+		}
+
 		double dx = targetX - x;
 		double dy = targetY - y;
-
-		// Below a single unit the easing would never converge, so close the gap outright.
-		if (Math.abs(dx) < 1 && Math.abs(dy) < 1)
-		{
-			x = targetX;
-			y = targetY;
-		}
-		else
-		{
-			x += dx * EASE;
-			y += dy * EASE;
-			face(dx, dy);
-		}
-
+		x += dx * EASE;
+		y += dy * EASE;
+		face(dx, dy);
 		apply();
 	}
 
@@ -186,7 +215,8 @@ class Ghost
 	@Nullable
 	Point canvasLocation()
 	{
-		return Perspective.localToCanvas(client, localPoint(), plane, LABEL_HEIGHT);
+		LocalPoint point = localPoint();
+		return point == null ? null : Perspective.localToCanvas(client, point, plane, LABEL_HEIGHT);
 	}
 
 	/** Removes the figure from the scene. */
@@ -202,14 +232,28 @@ class Ghost
 		return controller;
 	}
 
+	/**
+	 * The current position as a scene coordinate.
+	 * <p>
+	 * The world view is read fresh rather than held from construction: a figure can outlive a
+	 * scene reload, and a stale view would place it using the wrong frame of reference.
+	 */
+	@Nullable
 	private LocalPoint localPoint()
 	{
-		return new LocalPoint((int) x, (int) y, view);
+		WorldView view = client.getTopLevelWorldView();
+		return view == null ? null : new LocalPoint((int) x, (int) y, view);
 	}
 
 	private void apply()
 	{
-		object.setLocation(localPoint(), plane);
+		LocalPoint point = localPoint();
+		if (point == null)
+		{
+			return;
+		}
+		object.setLocation(point, plane);
+		dirty = false;
 	}
 
 	/**
@@ -226,5 +270,15 @@ class Ghost
 		}
 		int orientation = (int) (Math.atan2(-dx, -dy) * (1024.0 / Math.PI));
 		object.setOrientation(orientation & 0x7FF);
+	}
+
+	/** Trims a server-supplied name to something that cannot blow up the label box. */
+	private static String clip(String text)
+	{
+		if (text == null)
+		{
+			return "";
+		}
+		return text.length() <= MAX_LABEL_LENGTH ? text : text.substring(0, MAX_LABEL_LENGTH) + "…";
 	}
 }

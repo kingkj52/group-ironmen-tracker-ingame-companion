@@ -3,6 +3,7 @@ package com.groupironmencompanion.scene;
 import com.groupironmencompanion.GroupIronmenCompanionConfig;
 import java.awt.BasicStroke;
 import java.awt.Color;
+import java.util.Collection;
 import java.awt.Dimension;
 import java.awt.Font;
 import java.awt.FontMetrics;
@@ -69,7 +70,11 @@ public class GhostLabelOverlay extends Overlay
 	@Override
 	public Dimension render(Graphics2D graphics)
 	{
-		if (!config.scenePresence() || !config.scenePresenceLabels())
+		// Cheapest test first: this runs every frame whether the feature is on or not, and
+		// with nothing drawn the published list is empty, so the disabled case costs one
+		// field read rather than two config lookups.
+		Collection<Ghost> ghosts = presence.getVisible();
+		if (ghosts.isEmpty() || !config.scenePresence() || !config.scenePresenceLabels())
 		{
 			return null;
 		}
@@ -80,7 +85,7 @@ public class GhostLabelOverlay extends Overlay
 			return null;
 		}
 
-		Ghost hovered = nearest(mouse);
+		Ghost hovered = nearest(ghosts, mouse);
 		if (hovered == null)
 		{
 			return null;
@@ -97,12 +102,12 @@ public class GhostLabelOverlay extends Overlay
 	 * pointed at instead of whichever happened to be drawn earliest.
 	 */
 	@Nullable
-	private Ghost nearest(Point mouse)
+	private Ghost nearest(Collection<Ghost> ghosts, Point mouse)
 	{
 		Ghost best = null;
 		double bestDistance = HOVER_RADIUS;
 
-		for (Ghost ghost : presence.getVisible())
+		for (Ghost ghost : ghosts)
 		{
 			Point canvas = ghost.canvasLocation();
 			if (canvas == null)

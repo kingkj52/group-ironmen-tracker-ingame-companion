@@ -3,6 +3,8 @@ build/
 .gradle/
 tools/mapdump/build/
 tools/mapdump/.gradle/
+tools/geardump/build/
+tools/geardump/.gradle/
 
 # Intermediate output from the map data extractor; only the generated resource is checked in
 tools/mapdump/areas.json

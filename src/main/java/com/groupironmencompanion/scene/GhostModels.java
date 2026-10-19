@@ -16,23 +16,25 @@ import net.runelite.api.gameval.NpcID;
 /**
  * Builds the translucent blue models the scene renderer draws.
  * <p>
- * A member's real appearance cannot be reproduced. {@code PlayerComposition} is read-only with
- * no way to construct one, and nothing in the API turns a set of equipment ids into a model,
- * so every member is drawn as the same plain human figure. That turns out to be the right
- * answer rather than a limitation: an accurate copy of a player who is not on your world is
- * exactly the confusing thing to avoid, and a uniform washed-out figure reads as a marker.
+ * A member is assembled from the gear they are actually wearing. The running client will not
+ * say what an item looks like worn, so the meshes come from {@link GearTable}, extracted from
+ * the cache at build time, and {@link GhostAppearance} decides which goes where. The body
+ * underneath is a fixed default, because a member's own build and colouring are published
+ * nowhere; everything is recoloured to one blue anyway, so it never shows.
  * <p>
- * Models are cached because building one merges several meshes and relights the result, which
- * is far too much work to repeat every frame for every member.
+ * Models are cached because building one merges a dozen meshes and relights the result, far
+ * too much work to repeat every frame for every member. The cache is keyed on the assembled
+ * slots rather than on the member, so a group in matching gear builds one model between them
+ * and changing a single piece rebuilds only that outfit.
  */
 @Slf4j
 @Singleton
 public class GhostModels
 {
 	/**
-	 * The base figure. A plain human NPC, chosen because it is an ordinary unarmoured humanoid
-	 * that animates with the standard human animation set the inference in
-	 * {@link GhostAnimations} produces.
+	 * Fallback figure, used only when the bundled worn-model table cannot be read. A plain
+	 * human NPC, which animates with the same standard human animation set as an assembled
+	 * figure does.
 	 */
 	private static final int BASE_FIGURE_NPC = NpcID.MAN;
 
@@ -54,8 +56,15 @@ public class GhostModels
 	@Inject
 	private Client client;
 
-	/** Keyed by NPC id, with the base figure under its own id. Client thread only. */
+	/** Keyed by NPC id, with the fallback figure under its own id. Client thread only. */
 	private final Map<Integer, Model> cache = new HashMap<>();
+
+	/** Assembled member figures, keyed by the slot meshes they are built from. */
+	private final Map<String, Model> outfits = new HashMap<>();
+
+	/** The bundled worn-model table, loaded once and absent if it could not be read. */
+	private GearTable gear;
+	private boolean gearLoadAttempted;
 
 	/**
 	 * The transparency every cached model was baked with. Transparency is part of the built
@@ -64,11 +73,100 @@ public class GhostModels
 	 */
 	private int cachedTransparency = -1;
 
-	/** The figure used for group members. Client thread only. */
+	/**
+	 * The figure for a member wearing the given items. Client thread only.
+	 *
+	 * @param equippedItemIds item id per equipment slot, as the group publishes it
+	 * @param transparency    0 for opaque, 255 for invisible
+	 */
 	@Nullable
-	Model member(int transparency)
+	Model member(int[] equippedItemIds, int transparency)
 	{
-		return forNpc(BASE_FIGURE_NPC, transparency);
+		GearTable table = gear();
+		if (table == null)
+		{
+			// Without the table there is nothing to assemble, so fall back to a plain humanoid
+			// rather than drawing nothing at all.
+			return forNpc(BASE_FIGURE_NPC, transparency);
+		}
+
+		if (transparency != cachedTransparency)
+		{
+			dropCaches(transparency);
+		}
+
+		int[] slots = GhostAppearance.resolve(equippedItemIds, table);
+		String key = Arrays.toString(slots);
+
+		Model cached = outfits.get(key);
+		if (cached != null)
+		{
+			return cached;
+		}
+
+		Model built = assemble(slots, transparency);
+		if (built != null)
+		{
+			if (outfits.size() >= CACHE_LIMIT)
+			{
+				outfits.clear();
+			}
+			outfits.put(key, built);
+		}
+		return built;
+	}
+
+	/**
+	 * Merges the meshes for every occupied slot into one figure.
+	 * <p>
+	 * A slot whose mesh has not reached the client's cache yet fails the whole build, so that
+	 * the next tick tries again rather than leaving a member permanently missing a leg.
+	 */
+	@Nullable
+	private Model assemble(int[] slots, int transparency)
+	{
+		ModelData[] parts = new ModelData[slots.length];
+		int count = 0;
+
+		for (int model : slots)
+		{
+			if (model <= 0)
+			{
+				continue;
+			}
+			ModelData mesh = client.loadModelData(model);
+			if (mesh == null)
+			{
+				return null;
+			}
+			parts[count++] = mesh;
+		}
+
+		if (count == 0)
+		{
+			return null;
+		}
+
+		ModelData merged = client.mergeModels(Arrays.copyOf(parts, count));
+		return merged == null ? null : tint(merged, transparency).light();
+	}
+
+	@Nullable
+	private GearTable gear()
+	{
+		if (!gearLoadAttempted)
+		{
+			gearLoadAttempted = true;
+			gear = GearTable.load();
+		}
+		return gear;
+	}
+
+	private void dropCaches(int transparency)
+	{
+		cache.clear();
+		outfits.clear();
+		cachedTransparency = transparency;
 	}
 
 	/**
@@ -83,8 +181,7 @@ public class GhostModels
 	{
 		if (transparency != cachedTransparency)
 		{
-			cache.clear();
-			cachedTransparency = transparency;
+			dropCaches(transparency);
 		}
 
 		Model cached = cache.get(npcId);
@@ -113,6 +210,7 @@ public class GhostModels
 	void clear()
 	{
 		cache.clear();
+		outfits.clear();
 		cachedTransparency = -1;
 	}
 

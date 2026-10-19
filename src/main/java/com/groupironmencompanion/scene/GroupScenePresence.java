@@ -231,7 +231,7 @@ public class GroupScenePresence
 			memberGhosts.put(name, ghost);
 		}
 
-		ghost.setModel(models.member(transparency));
+		ghost.setModel(models.member(equippedItemIds(member), transparency));
 		ghost.moveTo(local, position.getPlane());
 
 		MemberTrail trail = trails.computeIfAbsent(name, key -> new MemberTrail());
@@ -435,6 +435,25 @@ public class GroupScenePresence
 			}
 		}
 		return null;
+	}
+
+	/**
+	 * A member's worn item ids, one per equipment slot.
+	 * <p>
+	 * The container is sent positionally, so a slot's index in the list is the equipment slot
+	 * itself and an empty slot is a zero id. That is exactly the shape the appearance rules
+	 * want, so it is handed over as-is rather than being interpreted here.
+	 */
+	private static int[] equippedItemIds(GroupMember member)
+	{
+		List<ItemStack> equipment = member.getEquipment();
+		int[] ids = new int[equipment.size()];
+		for (int slot = 0; slot < ids.length; slot++)
+		{
+			ItemStack item = equipment.get(slot);
+			ids[slot] = item == null || item.isEmpty() ? 0 : item.getId();
+		}
+		return ids;
 	}
 
 	/** The category of weapon a member has equipped, for choosing an attack animation. */

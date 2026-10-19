@@ -20,8 +20,8 @@ import net.runelite.client.ui.overlay.components.TitleComponent;
  * and, optionally, what each member is currently interacting with.
  * <p>
  * This is a plain RuneLite overlay the user can drag anywhere or switch off. It reads only
- * data your group members' own clients published to your shared server, and draws nothing in
- * the game scene or on the minimap.
+ * data your group members' own clients published to your shared server, and draws nothing on
+ * the minimap.
  */
 @Singleton
 public class GroupStatusOverlay extends OverlayPanel

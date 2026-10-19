@@ -107,13 +107,100 @@ public class ComplianceTest
 	}
 
 	@Test
-	public void drawsNothingInTheSceneOrOnTheMinimap() throws IOException
+	public void drawsNothingOnTheMinimap() throws IOException
 	{
-		// Member positions go on the world map only, never into the 3D scene or minimap,
-		// which keeps the plugin clear of the PvP and combat-assistance guidelines.
-		assertAbsent("Group member data must never be drawn in the game scene or on the minimap.",
-			"ABOVE_SCENE", "OverlayLayer.UNDER_WIDGETS", "Perspective.", "getCanvasTilePoly",
-			"localToMinimap", "LocalPoint");
+		// The minimap stays untouched without exception. Projecting group positions onto it
+		// would turn the plugin into a radar, which is the shape of tool the PvP and
+		// combat-assistance guidelines are aimed at.
+		assertAbsent("Group member data must never be drawn on the minimap.",
+			"localToMinimap", "getMinimapLocation", "worldToMinimap");
+	}
+
+	/**
+	 * Scene drawing is confined to one package.
+	 * <p>
+	 * The optional scene presence feature draws translucent figures where members are standing,
+	 * which needs scene coordinates and projection. That is a real expansion of what the plugin
+	 * touches, so rather than drop the guarantee it is narrowed: everything able to draw in the
+	 * scene lives under {@code scene/}, and a reviewer auditing that claim has one directory to
+	 * read. Nothing elsewhere may acquire the capability by accident.
+	 */
+	@Test
+	public void sceneDrawingIsConfinedToTheScenePackage() throws IOException
+	{
+		String[] sceneTokens = {
+			"LocalPoint", "Perspective.", "RuneLiteObject", "ABOVE_SCENE", "getCanvasTilePoly"
+		};
+
+		List<String> hits = new ArrayList<>();
+		for (Path path : sources())
+		{
+			String name = path.toString().replace('\\', '/');
+			if (name.contains("/scene/"))
+			{
+				continue;
+			}
+
+			List<String> lines = Files.readAllLines(path, StandardCharsets.UTF_8);
+			for (int i = 0; i < lines.size(); i++)
+			{
+				String trimmed = lines.get(i).trim();
+				if (trimmed.startsWith("//") || trimmed.startsWith("*") || trimmed.startsWith("/*")
+					|| trimmed.startsWith("import "))
+				{
+					continue;
+				}
+				for (String token : sceneTokens)
+				{
+					if (lines.get(i).contains(token))
+					{
+						hits.add(SOURCE_ROOT.relativize(path) + ":" + (i + 1) + "  " + trimmed);
+					}
+				}
+			}
+		}
+
+		if (!hits.isEmpty())
+		{
+			fail("Only the scene package may draw in the game scene.\n  "
+				+ String.join("\n  ", hits));
+		}
+	}
+
+	/**
+	 * The PvP cutout must stay hardwired.
+	 * <p>
+	 * A figure that cannot be clicked is harmless in a farming patch and dangerous in the
+	 * Wilderness, where reacting correctly to shapes on screen is the entire activity. The gate
+	 * therefore refuses to draw on any world where players can attack each other, and inside
+	 * the Wilderness on any world, with no setting to override it. This test exists so nobody
+	 * can add one later without deliberately deleting the test that forbids it.
+	 */
+	@Test
+	public void scenePresenceIsHardwiredOffInPvp() throws IOException
+	{
+		Path gate = SOURCE_ROOT.resolve("com/groupironmencompanion/scene/ScenePresenceGate.java");
+		assertTrue("the scene presence gate must exist", Files.isRegularFile(gate));
+
+		String source = new String(Files.readAllBytes(gate), StandardCharsets.UTF_8);
+		for (String required : new String[]{
+			"WorldType.PVP", "WorldType.BOUNTY", "WorldType.HIGH_RISK", "WorldType.DEADMAN",
+			"WorldType.LAST_MAN_STANDING", "WorldType.PVP_ARENA", "VarbitID.INSIDE_WILDERNESS"})
+		{
+			assertTrue("the gate must refuse to draw for " + required, source.contains(required));
+		}
+
+		Path config = SOURCE_ROOT.resolve("com/groupironmencompanion/GroupIronmenCompanionConfig.java");
+		String configSource = new String(Files.readAllBytes(config), StandardCharsets.UTF_8)
+			.toLowerCase(java.util.Locale.ROOT);
+		for (String forbidden : new String[]{"wilderness", "pvp"})
+		{
+			if (configSource.contains("keyname = \"" + forbidden))
+			{
+				fail("There must be no setting that relaxes the PvP cutout: found a key named "
+					+ forbidden);
+			}
+		}
 	}
 
 	@Test

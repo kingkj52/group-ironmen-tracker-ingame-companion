@@ -124,8 +124,10 @@ bar, so this plugin is built to stay clearly inside
 - **Read-only by construction.** The plugin only ever holds item ids and quantities read back
   from your group's server. There is no code path that could withdraw, deposit or use
   anything.
-- **Nothing in the game scene or on the minimap.** Member positions are drawn on the world
-  map only.
+- **Nothing on the minimap, ever.** Member positions go on the world map. One optional
+  feature, off by default, draws translucent figures in the game scene where nearby members
+  are standing; it is confined to its own package, cannot be clicked or targeted, and is
+  hardwired off in the Wilderness and on PvP worlds with no setting to override that.
 - **No PvP or combat assistance.** The only combat-adjacent data shown is what a group member
   is interacting with, in the side panel and the optional status overlay, never as a scene
   overlay and never for players. It can be switched off. This is your own five-person group,

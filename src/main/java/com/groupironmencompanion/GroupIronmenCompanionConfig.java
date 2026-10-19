@@ -65,9 +65,22 @@ public interface GroupIronmenCompanionConfig extends Config
 	String statusSection = "status";
 
 	@ConfigSection(
+		name = "Scene presence",
+		description = "EXPERIMENTAL, and off by default. Draws group members standing near you as "
+			+ "translucent blue figures, even when they are on another world, so that working the "
+			+ "same area apart still looks like working it together. The figures are drawn by this "
+			+ "plugin only: they are not game entities, cannot be clicked or targeted, and the "
+			+ "server is never told they exist. They are never drawn in the Wilderness or on any "
+			+ "PvP world, and that cannot be turned off.",
+		position = 6,
+		closedByDefault = true
+	)
+	String sceneSection = "scene";
+
+	@ConfigSection(
 		name = "Member colours",
 		description = "Each member is drawn in their own colour, assigned in alphabetical order of member name",
-		position = 6,
+		position = 7,
 		closedByDefault = true
 	)
 	String colourSection = "colours";
@@ -78,7 +91,7 @@ public interface GroupIronmenCompanionConfig extends Config
 			+ "under Connection, so the rest of your group can see it. See the setting below for "
 			+ "exactly what is sent. This only happens when the official Group Ironmen Tracker "
 			+ "plugin is not already doing it.",
-		position = 7,
+		position = 8,
 		closedByDefault = true
 	)
 	String uploadSection = "upload";
@@ -169,7 +182,7 @@ public interface GroupIronmenCompanionConfig extends Config
 	@ConfigItem(
 		keyName = "panelShowActivity",
 		name = "Show what members are doing",
-		description = "Include the NPC each member is interacting with, and its remaining health. Informational only; never drawn in the game scene.",
+		description = "Include the NPC each member is interacting with, and its remaining health. Informational only.",
 		position = 1,
 		section = panelSection
 	)
@@ -352,7 +365,7 @@ public interface GroupIronmenCompanionConfig extends Config
 	@ConfigItem(
 		keyName = "worldMapMarkers",
 		name = "Show members on the world map",
-		description = "Draw a marker for each group member on the world map. The minimap and the game scene are never drawn on.",
+		description = "Draw a marker for each group member on the world map. The minimap is never drawn on.",
 		position = 0,
 		section = mapSection
 	)
@@ -443,7 +456,7 @@ public interface GroupIronmenCompanionConfig extends Config
 	@ConfigItem(
 		keyName = "statusShowActivity",
 		name = "Show what members are doing",
-		description = "Include the NPC each member is interacting with, and its remaining health. Informational only; never drawn in the game scene.",
+		description = "Include the NPC each member is interacting with, and its remaining health. Informational only.",
 		position = 2,
 		section = statusSection
 	)
@@ -474,6 +487,65 @@ public interface GroupIronmenCompanionConfig extends Config
 	default boolean statusShowSelf()
 	{
 		return false;
+	}
+
+	// ------------------------------------------------------------------
+	// Scene presence
+	// ------------------------------------------------------------------
+
+	@ConfigItem(
+		keyName = "scenePresence",
+		name = "Draw members in the world",
+		description = "Draw group members who are close enough to be on screen as translucent blue "
+			+ "figures, whichever world they are on. They are this plugin's own drawing, not game "
+			+ "entities: nothing can click or target them. Never drawn in the Wilderness or on a "
+			+ "PvP world.",
+		position = 0,
+		section = sceneSection
+	)
+	default boolean scenePresence()
+	{
+		return false;
+	}
+
+	@ConfigItem(
+		keyName = "scenePresenceOpponents",
+		name = "Also draw what they are fighting",
+		description = "Draw a translucent copy of the NPC a member is fighting next to them, when "
+			+ "the same kind of NPC is present in your own scene to copy the shape of.",
+		position = 1,
+		section = sceneSection
+	)
+	default boolean scenePresenceOpponents()
+	{
+		return true;
+	}
+
+	@ConfigItem(
+		keyName = "scenePresenceLabels",
+		name = "Name the figure under the cursor",
+		description = "Show the member's name, and what they are fighting, in a small panel beside "
+			+ "the cursor. It is a label, not a menu, and cannot be clicked.",
+		position = 2,
+		section = sceneSection
+	)
+	default boolean scenePresenceLabels()
+	{
+		return true;
+	}
+
+	@Range(min = 60, max = 230)
+	@ConfigItem(
+		keyName = "scenePresenceTransparency",
+		name = "Transparency",
+		description = "How see-through the figures are. Higher is fainter. Kept away from solid so "
+			+ "a figure never reads as a real player.",
+		position = 3,
+		section = sceneSection
+	)
+	default int scenePresenceTransparency()
+	{
+		return 150;
 	}
 
 	// ------------------------------------------------------------------

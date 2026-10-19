@@ -66,9 +66,9 @@ public interface GroupIronmenCompanionConfig extends Config
 
 	@ConfigSection(
 		name = "Scene presence",
-		description = "EXPERIMENTAL, and off by default. Draws group members standing near you as "
-			+ "translucent blue figures, even when they are on another world, so that working the "
-			+ "same area apart still looks like working it together. The figures are drawn by this "
+		description = "EXPERIMENTAL, and off by default. Draws group members who are standing near "
+			+ "you but are on another world as translucent blue figures, so that working the same "
+			+ "area apart still looks like working it together. The figures are drawn by this "
 			+ "plugin only: they are not game entities, cannot be clicked or targeted, and the "
 			+ "server is never told they exist. They are never drawn in the Wilderness or on any "
 			+ "PvP world, and that cannot be turned off.",
@@ -495,11 +495,11 @@ public interface GroupIronmenCompanionConfig extends Config
 
 	@ConfigItem(
 		keyName = "scenePresence",
-		name = "Draw members in the world",
-		description = "Draw group members who are close enough to be on screen as translucent blue "
-			+ "figures, whichever world they are on. They are this plugin's own drawing, not game "
-			+ "entities: nothing can click or target them. Never drawn in the Wilderness or on a "
-			+ "PvP world.",
+		name = "Draw members on other worlds",
+		description = "Draw group members who are standing close enough to be on screen, but are on "
+			+ "another world, as translucent blue figures. A member on your own world is left to the "
+			+ "game to draw. They are this plugin's own drawing, not game entities: nothing can "
+			+ "click or target them. Never drawn in the Wilderness or on a PvP world.",
 		position = 0,
 		section = sceneSection
 	)

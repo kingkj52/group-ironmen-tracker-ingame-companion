@@ -38,4 +38,32 @@ public class GroupScenePresenceTest
 		assertFalse(GroupScenePresence.isRealPlane(-1));
 		assertFalse(GroupScenePresence.isRealPlane(Integer.MIN_VALUE));
 	}
+
+	// ------------------------------------------------------------------
+	// Whose job it is to draw a member
+	// ------------------------------------------------------------------
+
+	@Test
+	public void aMemberOnOurOwnWorldIsTheGamesToDraw()
+	{
+		// The point of the feature is seeing someone who is not here. When they are, the real
+		// player is standing there and a ghost would be a duplicate inside them.
+		assertTrue(GroupScenePresence.isOurWorld(302, 302));
+	}
+
+	@Test
+	public void aMemberOnAnotherWorldIsOursToDraw()
+	{
+		assertFalse(GroupScenePresence.isOurWorld(301, 302));
+	}
+
+	@Test
+	public void anUnknownWorldIsNotTreatedAsOurs()
+	{
+		// getWorld returns -1 for a member who has reported a position but no stats yet.
+		// Claiming that as our world would hide them; the caller falls back to looking for a
+		// real player of that name instead.
+		assertFalse(GroupScenePresence.isOurWorld(-1, 302));
+		assertFalse(GroupScenePresence.isOurWorld(0, 0));
+	}
 }

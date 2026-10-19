@@ -21,6 +21,7 @@ import net.runelite.api.Client;
 import net.runelite.api.Constants;
 import net.runelite.api.EquipmentInventorySlot;
 import net.runelite.api.NPC;
+import net.runelite.api.Player;
 import net.runelite.api.WorldView;
 import net.runelite.api.coords.LocalPoint;
 import net.runelite.api.coords.WorldPoint;
@@ -142,6 +143,13 @@ public class GroupScenePresence
 			WorldPoint position = member.getWorldPoint();
 			if (position == null || member.isOnBoat())
 			{
+				continue;
+			}
+
+			if (alreadyDrawnByTheGame(view, member))
+			{
+				// They are really here, so the game is drawing them. A ghost on top would be
+				// a translucent copy standing inside the actual player.
 				continue;
 			}
 
@@ -347,6 +355,42 @@ public class GroupScenePresence
 		int x = point.getSceneX();
 		int y = point.getSceneY();
 		return x >= 0 && y >= 0 && x < view.getSizeX() && y < view.getSizeY();
+	}
+
+	/**
+	 * Whether the game is already drawing this member itself, making a ghost redundant.
+	 * <p>
+	 * The whole point of the feature is seeing someone who is not on your world. When they
+	 * are, the real player is standing there and a ghost is a translucent duplicate inside
+	 * them.
+	 * <p>
+	 * The world number settles it outright and costs nothing, so it is asked first. A member
+	 * who has reported a position but not yet any stats has no known world, and then the only
+	 * honest test is whether a player of that name is actually in the scene. That walk is
+	 * confined to the case where the cheap answer is unavailable.
+	 */
+	private boolean alreadyDrawnByTheGame(WorldView view, GroupMember member)
+	{
+		int world = member.getWorld();
+		if (world > 0)
+		{
+			return isOurWorld(world, client.getWorld());
+		}
+
+		for (Player player : view.players())
+		{
+			if (GroupState.namesMatch(player.getName(), member.getName()))
+			{
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/** Whether a member's reported world is this one, and therefore the game's to draw. */
+	static boolean isOurWorld(int memberWorld, int localWorld)
+	{
+		return memberWorld > 0 && memberWorld == localWorld;
 	}
 
 	/**

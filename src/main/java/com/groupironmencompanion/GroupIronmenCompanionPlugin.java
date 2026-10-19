@@ -14,6 +14,8 @@ import com.groupironmencompanion.map.GroupMapOverlay;
 import com.groupironmencompanion.overlay.GroupStatusOverlay;
 import com.groupironmencompanion.overlay.SkillHoverOverlay;
 import com.groupironmencompanion.route.RouteTracker;
+import com.groupironmencompanion.scene.GhostLabelOverlay;
+import com.groupironmencompanion.scene.GroupScenePresence;
 import com.groupironmencompanion.ui.GroupPanel;
 import com.groupironmencompanion.upload.GroupUploader;
 import java.awt.Color;
@@ -31,6 +33,7 @@ import net.runelite.api.Client;
 import net.runelite.api.GameState;
 import net.runelite.api.Player;
 import net.runelite.api.events.GameStateChanged;
+import net.runelite.api.events.ClientTick;
 import net.runelite.api.events.GameTick;
 import net.runelite.api.events.ItemContainerChanged;
 import net.runelite.api.events.StatChanged;
@@ -64,8 +67,14 @@ import net.runelite.client.util.HotkeyListener;
  * <b>What it deliberately does not do:</b> it adds no menu entries of any kind, so nothing
  * it draws can cause an action to be sent to the server. It never creates, modifies, hides,
  * unhides, reparents, moves or resizes any game widget or click zone; every view it provides
- * is its own drawing. It draws nothing in the game scene and nothing on the minimap, and it
- * offers no combat information about anyone outside your own opted-in group.
+ * is its own drawing. It draws nothing on the minimap, and it offers no combat information
+ * about anyone outside your own opted-in group.
+ * <p>
+ * One optional feature, off by default, does draw in the game scene: scene presence puts a
+ * translucent figure where a nearby group member is standing, so that farming the same area
+ * on separate worlds still looks cooperative. Those figures are the plugin's own drawing and
+ * nothing more - absent from the player and NPC lists, impossible to click or target, unknown
+ * to the server - and they are never drawn in the Wilderness or on a PvP world.
  */
 @Slf4j
 @PluginDescriptor(
@@ -145,6 +154,12 @@ public class GroupIronmenCompanionPlugin extends Plugin
 	@Inject
 	private GroupStatusOverlay statusOverlay;
 
+	@Inject
+	private GroupScenePresence scenePresence;
+
+	@Inject
+	private GhostLabelOverlay ghostLabelOverlay;
+
 	private GroupPanel panel;
 	private NavigationButton navButton;
 
@@ -202,6 +217,7 @@ public class GroupIronmenCompanionPlugin extends Plugin
 		overlayManager.add(skillHoverOverlay);
 		overlayManager.add(statusOverlay);
 		overlayManager.add(mapOverlay);
+		overlayManager.add(ghostLabelOverlay);
 
 		keyManager.registerKeyListener(bankHotkey);
 		mouseManager.registerMouseListener(bankInput);
@@ -244,6 +260,7 @@ public class GroupIronmenCompanionPlugin extends Plugin
 		overlayManager.remove(skillHoverOverlay);
 		overlayManager.remove(statusOverlay);
 		overlayManager.remove(mapOverlay);
+		overlayManager.remove(ghostLabelOverlay);
 
 		keyManager.unregisterKeyListener(bankHotkey);
 		mouseManager.unregisterMouseListener(bankInput);
@@ -256,6 +273,7 @@ public class GroupIronmenCompanionPlugin extends Plugin
 		uploader.reset();
 		routeTracker.stop();
 		clientThread.invoke(mapMarkers::clear);
+		clientThread.invoke(scenePresence::reset);
 		groupState.reset();
 	}
 
@@ -361,6 +379,8 @@ public class GroupIronmenCompanionPlugin extends Plugin
 			localPlayerName = null;
 			bankInput.closeAll();
 			routeTracker.stop();
+			// The scene is about to be replaced, so every figure in it is stale.
+			clientThread.invoke(scenePresence::clear);
 		}
 	}
 
@@ -400,6 +420,19 @@ public class GroupIronmenCompanionPlugin extends Plugin
 			ticksSinceMapRefresh = 0;
 			mapMarkers.refresh();
 		}
+
+		scenePresence.onGameTick();
+	}
+
+	/**
+	 * Figures are eased toward their reported positions on the client tick rather than the
+	 * game tick, because a position arrives about once a second and snapping to it once a
+	 * second looks like teleporting.
+	 */
+	@Subscribe
+	public void onClientTick(ClientTick event)
+	{
+		scenePresence.onClientTick();
 	}
 
 	@Subscribe
@@ -480,6 +513,13 @@ public class GroupIronmenCompanionPlugin extends Plugin
 			case "worldMapEntrances":
 			case "worldMapOffline":
 				clientThread.invoke(mapMarkers::refresh);
+				break;
+
+			case "scenePresence":
+			case "scenePresenceOpponents":
+			case "scenePresenceTransparency":
+				// Transparency is baked into the built models, so a change has to drop them.
+				clientThread.invoke(scenePresence::reset);
 				break;
 
 			case "offlineAfterMinutes":

@@ -48,12 +48,38 @@ public class GhostAppearanceTest
 	public void theBundledTableIsPresentAndPopulated()
 	{
 		GearTable table = table();
-		assertTrue("the table should cover thousands of items", table.itemCount() > 3000);
+		assertTrue("the table should cover thousands of items", table.itemCount() > 5000);
 
 		for (int part = 0; part <= 6; part++)
 		{
 			assertTrue("body part " + part + " needs a default model", table.bodyModel(part) > 0);
 		}
+	}
+
+	/**
+	 * Catches a table built from the wrong cache.
+	 * <p>
+	 * This has already happened once: the Jagex launcher leaves a copy at
+	 * {@code ~/jagexcache} that goes stale the moment you stop launching the game that way,
+	 * and a five year old one produced a table that looked entirely healthy. It had thousands
+	 * of items and every model id resolved, but the ids were for meshes the current client no
+	 * longer has, so members rendered as a floating head.
+	 * <p>
+	 * Nothing about a stale table looks wrong from the inside, so the check has to be for
+	 * something that only exists in a recent cache.
+	 */
+	@Test
+	public void theTableWasBuiltFromARecentCache()
+	{
+		GearTable table = table();
+
+		int[] sunlightCrossbow = table.wornModels(28869);
+		assertNotNull("Hunters' sunlight crossbow is missing: the cache used to build the "
+			+ "worn-model table predates Varlamore. Regenerate with tools/geardump against "
+			+ "~/.runelite/jagexcache, not ~/jagexcache.", sunlightCrossbow);
+		assertTrue(sunlightCrossbow[0] > 0);
+
+		assertNotNull("Mixed hide top is missing from the worn-model table", table.wornModels(29280));
 	}
 
 	@Test

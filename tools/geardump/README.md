@@ -11,9 +11,18 @@ is.
 
 ## Regenerating after a game update
 
+> **Use RuneLite's own cache, not `~/jagexcache`.** The Jagex launcher's copy at
+> `~/jagexcache/oldschool/LIVE` can be years out of date if you no longer launch the game that
+> way, and a stale cache is silently wrong rather than obviously broken: model and area ids
+> shift between revisions, so what comes out references meshes the running client no longer
+> has. Check the modification date of `main_file_cache.dat2` before trusting either path.
+
 ```bash
-./gradlew run --args="$HOME/jagexcache/oldschool/LIVE ../../src/main/resources/com/groupironmencompanion/gear.dat"
+./gradlew run --args="$HOME/.runelite/jagexcache/oldschool/LIVE ../../src/main/resources/com/groupironmencompanion/gear.dat"
 ```
+
+A third argument filters items by name and prints what the table holds for each, which is the
+quickest way to check whether a particular piece of gear made it in.
 
 Then run the plugin's own `GhostAppearanceTest`, which loads the regenerated resource and
 asserts that a spread of known items still resolve the way the composition rules expect. It is

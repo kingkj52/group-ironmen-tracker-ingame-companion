@@ -78,7 +78,14 @@ public class GearDump
 			Map<Integer, int[]> items = loadWornItems(store);
 			int[] body = loadDefaultBody(store);
 
+			verifyModelsExist(store, items, body);
+
 			write(out, items, body);
+
+			if (args.length > 2)
+			{
+				report(store, items, args[2]);
+			}
 
 			System.out.println("worn items: " + items.size());
 			System.out.print("default male body kit models:");
@@ -88,6 +95,86 @@ public class GearDump
 			}
 			System.out.println();
 			System.out.println("wrote " + out + " (" + out.length() + " bytes)");
+		}
+	}
+
+	/**
+	 * Checks every model id actually exists in the cache's model index.
+	 * <p>
+	 * A referenced-but-absent model is the failure that shows up in game as a figure missing
+	 * a limb, and it is silent at runtime: the client simply returns nothing for the id. It is
+	 * far cheaper to catch here, where every id can be checked at once.
+	 */
+	private static void verifyModelsExist(Store store, Map<Integer, int[]> items, int[] body)
+	{
+		Index models = store.getIndex(IndexType.MODELS);
+
+		int missingBody = 0;
+		for (int part = 0; part < body.length; part++)
+		{
+			if (body[part] > 0 && models.getArchive(body[part]) == null)
+			{
+				System.out.println("  WARNING body part " + part + " model " + body[part]
+					+ " is not in the model index");
+				missingBody++;
+			}
+		}
+
+		int missingItems = 0;
+		for (Map.Entry<Integer, int[]> entry : items.entrySet())
+		{
+			for (int i = 0; i < 3; i++)
+			{
+				int model = entry.getValue()[i];
+				if (model > 0 && models.getArchive(model) == null)
+				{
+					missingItems++;
+				}
+			}
+		}
+
+		System.out.println("model index check: " + missingBody + " body models and "
+			+ missingItems + " item models missing");
+	}
+
+	/** Prints what the table holds for every item whose name matches, for diagnosing gaps. */
+	private static void report(Store store, Map<Integer, int[]> items, String needle)
+		throws IOException
+	{
+		ItemManager manager = new ItemManager(store);
+		manager.load();
+		Index models = store.getIndex(IndexType.MODELS);
+
+		String lower = needle.toLowerCase();
+		System.out.println("items matching '" + needle + "':");
+		for (ItemDefinition item : manager.getItems())
+		{
+			if (item == null || item.name == null || !item.name.toLowerCase().contains(lower))
+			{
+				continue;
+			}
+			int[] worn = items.get(item.getId());
+			StringBuilder line = new StringBuilder();
+			line.append("  ").append(item.getId()).append(" '").append(item.name).append("'");
+			if (worn == null)
+			{
+				line.append("  NOT IN TABLE (maleModel0=").append(item.maleModel0)
+					.append(" noted=").append(item.notedTemplate)
+					.append(" placeholder=").append(item.placeholderTemplateId).append(")");
+			}
+			else
+			{
+				line.append("  models=").append(worn[0]).append(",").append(worn[1])
+					.append(",").append(worn[2]);
+				for (int i = 0; i < 3; i++)
+				{
+					if (worn[i] > 0 && models.getArchive(worn[i]) == null)
+					{
+						line.append("  MODEL ").append(worn[i]).append(" MISSING");
+					}
+				}
+			}
+			System.out.println(line);
 		}
 	}
 

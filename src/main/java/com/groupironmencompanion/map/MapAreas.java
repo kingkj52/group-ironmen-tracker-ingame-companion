@@ -94,7 +94,12 @@ public final class MapAreas
 		// small is that the bug comes back for part of the arena; too large, and some other
 		// unmapped pocket borrows the wrong name while still losing the pin it should not have
 		// had.
-		addBox(detached, 55, 57, 147, 148, new Detached("Guardians of the Rift", null));
+		// You reach the arena through the portal in the Wizards' Tower basement, and the
+		// basement itself from the ladder in the tower. That ladder is the surface end, and it
+		// is not a guess: the cache's own intermap links pair (3103, 9576) with (3104, 3162),
+		// so the coordinate comes from the same data everything else here does.
+		addBox(detached, 55, 57, 147, 148,
+			new Detached("Guardians of the Rift", new WorldPoint(3104, 3162, 0)));
 
 		return detached;
 	}

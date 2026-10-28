@@ -76,15 +76,21 @@ public class MapAreasTest
 	}
 
 	@Test
-	public void namesADetachedAreaRatherThanPinningItToTheWrongPlace()
+	public void pinsADetachedAreaAtThePlaceYouTravelToItFrom()
 	{
-		// Guardians of the Rift has no world map of its own, and nothing above it. Projecting
-		// it out of the underground band lands in the open sea east of Morytania, which the
-		// marker used to present as fact.
+		// Guardians of the Rift has no world map of its own and nothing above it, so
+		// projecting it out of the underground band landed in the open sea east of the Ruins
+		// of Uzer and presented that as fact. You actually get there through the portal in the
+		// Wizards' Tower basement, reached by the ladder in the tower, and the cache pairs
+		// (3103, 9576) with (3104, 3162) for exactly that trip.
 		MapAreas.Located located = areas.locate(at(3615, 9469));
 		assertNotNull(located);
-		assertNull("a detached area must not be pinned anywhere", located.getEntrance());
-		assertEquals("Guardians of the Rift", located.describe());
+		assertNotNull("a detached area with a known travel point should be pinned at it",
+			located.getEntrance());
+		assertEquals(3104, located.getEntrance().getX());
+		assertEquals(3162, located.getEntrance().getY());
+		assertEquals("the label must name the area, not the doorway",
+			"Guardians of the Rift", located.describe());
 	}
 
 	@Test
@@ -106,10 +112,14 @@ public class MapAreasTest
 		{
 			MapAreas.Located located = areas.locate(at(p[0], p[1]));
 			assertNotNull(located);
-			assertNull("(" + p[0] + "," + p[1] + ") must not be pinned to the surface",
-				located.getEntrance());
 			assertEquals("(" + p[0] + "," + p[1] + ") should be named",
 				"Guardians of the Rift", located.describe());
+			assertNotNull("(" + p[0] + "," + p[1] + ") should be pinned",
+				located.getEntrance());
+			assertEquals("(" + p[0] + "," + p[1] + ") must pin to the Wizards' Tower, never "
+				+ "to the projection out of the underground band",
+				3104, located.getEntrance().getX());
+			assertEquals(3162, located.getEntrance().getY());
 		}
 	}
 

@@ -76,6 +76,18 @@ public class MapAreasTest
 	}
 
 	@Test
+	public void namesADetachedAreaRatherThanPinningItToTheWrongPlace()
+	{
+		// Guardians of the Rift has no world map of its own, and nothing above it. Projecting
+		// it out of the underground band lands in the open sea east of Morytania, which the
+		// marker used to present as fact.
+		MapAreas.Located located = areas.locate(at(3615, 9469));
+		assertNotNull(located);
+		assertNull("a detached area must not be pinned anywhere", located.getEntrance());
+		assertEquals("Guardians of the Rift", located.describe());
+	}
+
+	@Test
 	public void fallsBackToProjectionWhenTheCacheHasNoLink()
 	{
 		// The Barrows tunnels have no intermap link, but like every area in the underground

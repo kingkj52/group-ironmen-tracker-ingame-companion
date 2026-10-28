@@ -52,6 +52,40 @@ public final class MapAreas
 	 */
 	private static final int ENTRANCE_SNAP_RADIUS = 64;
 
+	/**
+	 * Places in the underground band that are not under anything, keyed by map square.
+	 * <p>
+	 * The projection below assumes an area sits 6400 tiles directly beneath the surface it
+	 * belongs to. That holds for the Barrows tunnels and most caves. It does not hold for a
+	 * detached pocket with no world map of its own: subtract 6400 from Guardians of the Rift
+	 * and the result is the open sea east of Morytania, which is what the marker used to
+	 * claim.
+	 * <p>
+	 * Nothing in the cache separates the two cases. Both have no area, no intermap link, and
+	 * no entrance within snapping distance, and both project onto squares the overworld draws,
+	 * because the overworld draws sea. The gap in distance-to-nearest-entrance is 85 tiles
+	 * against 125, with a smooth spread of a thousand other squares across that range, so
+	 * there is no threshold to find.
+	 * <p>
+	 * So this is a short, deliberately hand-entered list, and the only positional data in the
+	 * plugin that is not generated. Entries carry a name and no position, which is the point:
+	 * the member is named rather than pinned. They are not lost by it, because the world map
+	 * draws these areas at their real coordinates, far north of the overworld where the
+	 * detached maps are laid out, and their own marker is already there.
+	 * <p>
+	 * To add one: stand in the area, take the coordinates, and pack them the way
+	 * {@link #squareOf} does.
+	 */
+	private static final Map<Integer, String> DETACHED_AREAS = detachedAreas();
+
+	private static Map<Integer, String> detachedAreas()
+	{
+		Map<Integer, String> detached = new HashMap<>();
+		// (3615, 9469): the transport in and out of the arena, per the group's own map.
+		detached.put(squareOf(3615, 9469), "Guardians of the Rift");
+		return detached;
+	}
+
 	private static volatile MapAreas instance;
 
 	private final Map<Integer, Area> bySquare;
@@ -134,11 +168,24 @@ public final class MapAreas
 			return null;
 		}
 
-		Area area = bySquare.get(squareOf(point.getX(), point.getY()));
+		int square = squareOf(point.getX(), point.getY());
+
+		Area area = bySquare.get(square);
 		if (area == null && point.getY() < UNDERGROUND_Y)
 		{
 			// Not in any detached area and not in the underground band: this is the overworld.
 			return null;
+		}
+
+		if (area == null)
+		{
+			String detached = DETACHED_AREAS.get(square);
+			if (detached != null)
+			{
+				// Somewhere the world map has no map for and nothing above. Naming it without
+				// a pin is the whole point: see DETACHED_AREAS.
+				return new Located(detached, null, null);
+			}
 		}
 
 		String areaName = area == null ? null : area.name;

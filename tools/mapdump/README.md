@@ -66,3 +66,17 @@ around a known coordinate:
 The arguments are the cache, then the region x and y range to scan. Terrain existing for a
 region does not mean the world map draws it, which is the whole problem; what the grid gives
 you is how far the area plausibly runs, so the box is not sized from a single point.
+
+### Object placements are readable
+
+`locProbe` prints, for a handful of regions, whether the terrain and the object placements
+open:
+
+```bash
+./gradlew locProbe --args="$HOME/.runelite/jagexcache/oldschool/LIVE"
+```
+
+Both do, with no XTEA keys — 480 objects in the Guardians of the Rift region, 7,079 in
+Varrock. This is recorded because the opposite was assumed once and written into a comment in
+`MapAreas`: that an area's entrance could not be found because placements were encrypted. They
+are not, so object data is available for working out where a detached area is entered from.

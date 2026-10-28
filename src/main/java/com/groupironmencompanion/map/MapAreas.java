@@ -119,11 +119,17 @@ public final class MapAreas
 	/**
 	 * A detached area, and optionally where on the surface you travel to it from.
 	 * <p>
-	 * The entrance is separate from the name because the two are known independently. Naming
-	 * an area needs only the observation that a member is in it; pinning one to the surface
-	 * needs the travel point, which is not in any data the plugin can read - the cache's
-	 * object placements are encrypted, and the area has no world map whose links could be
-	 * followed. Until that coordinate is known for an area, it is named and left unpinned.
+	 * The entrance is separate from the name because the two are established independently.
+	 * Naming an area needs only the observation that a member is in it. Pinning one needs the
+	 * travel point, and that has to be found, because a detached area by definition has no
+	 * world map of its own whose exits could be read. The Rift's came from the far end: the
+	 * portal arrives in the Wizards' Tower basement, which is inside a mapped area, so the
+	 * cache's links do carry the trip out to the surface.
+	 * <p>
+	 * Where that does not work, the cache's object placements are readable, keys and all, and
+	 * {@code tools/mapdump}'s locProbe shows it. An earlier version of this comment claimed
+	 * they were encrypted and they are not; the locations archive opens with no XTEA key at
+	 * all. So a future entry has somewhere to look rather than needing to be measured in game.
 	 */
 	private static final class Detached
 	{

@@ -31,3 +31,8 @@ tasks.register('regionProbe', JavaExec) {
 	classpath = sourceSets.main.runtimeClasspath
 	mainClass = 'RegionProbe'
 }
+
+tasks.register('locProbe', JavaExec) {
+	classpath = sourceSets.main.runtimeClasspath
+	mainClass = 'LocProbe'
+}

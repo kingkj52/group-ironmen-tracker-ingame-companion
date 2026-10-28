@@ -25,7 +25,10 @@ import re
 import sys
 from collections import deque
 
-SURFACE_MAP = "RuneScape Surface"
+# The surface map is identified by the cache's own isSurface flag rather than by name.
+# It used to be matched on the literal "RuneScape Surface", which silently stopped matching
+# when Jagex renamed it to "Gielinor Surface": the surface was then treated as just another
+# dungeon area, so every member standing on it looked like they were underground.
 NAME_SNAP = 30  # tiles: how close a DungeonLocation must be to lend its name
 
 sys.stdout.reconfigure(encoding="utf-8")
@@ -73,12 +76,19 @@ def main():
     square_owner = {}
     for entry in dump["areas"]:
         squares = {packed(s[0], s[1]) for s in entry["squares"]}
-        if entry["name"] == SURFACE_MAP:
-            surface_squares = squares
+        if entry["isSurface"]:
+            surface_squares |= squares
             continue
         areas[entry["name"]] = {"name": entry["name"], "squares": squares, "exits": []}
         for square in squares:
             square_owner[square] = entry["name"]
+
+    if not surface_squares:
+        raise SystemExit(
+            "no map in areas.json is flagged isSurface; the dump is wrong or the cache's "
+            "world map data changed shape. Refusing to build a resource in which every "
+            "surface position would read as underground."
+        )
 
     def on_surface(point):
         return square_of(point[0], point[1]) in surface_squares

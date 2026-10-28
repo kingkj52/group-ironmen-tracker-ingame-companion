@@ -76,14 +76,60 @@ public final class MapAreas
 	 * To add one: stand in the area, take the coordinates, and pack them the way
 	 * {@link #squareOf} does.
 	 */
-	private static final Map<Integer, String> DETACHED_AREAS = detachedAreas();
+	private static final Map<Integer, Detached> DETACHED_AREAS = detachedAreas();
 
-	private static Map<Integer, String> detachedAreas()
+	private static Map<Integer, Detached> detachedAreas()
 	{
-		Map<Integer, String> detached = new HashMap<>();
-		// (3615, 9469): the transport in and out of the arena, per the group's own map.
-		detached.put(squareOf(3615, 9469), "Guardians of the Rift");
+		Map<Integer, Detached> detached = new HashMap<>();
+
+		// Guardians of the Rift. The transport in and out of the arena is at (3615, 9469),
+		// which is square (56, 147) at an offset of 31 east and 61 north within it. Sitting
+		// three tiles from that square's northern edge means the arena necessarily continues
+		// into (56, 148), and being mid-square on the x axis means it may reach either side,
+		// so the box is a square wider in each direction than the one observed point proves.
+		//
+		// Over-covering is close to free here. This map is only consulted when no real area
+		// claims the square, and the box is hemmed in by areas that do: Kharidian Desert
+		// Underground to the west, Mos Le'Harmless Cave to the east. The cost of guessing too
+		// small is that the bug comes back for part of the arena; too large, and some other
+		// unmapped pocket borrows the wrong name while still losing the pin it should not have
+		// had.
+		addBox(detached, 55, 57, 147, 148, new Detached("Guardians of the Rift", null));
+
 		return detached;
+	}
+
+	private static void addBox(Map<Integer, Detached> into, int squareX0, int squareX1,
+		int squareY0, int squareY1, Detached area)
+	{
+		for (int x = squareX0; x <= squareX1; x++)
+		{
+			for (int y = squareY0; y <= squareY1; y++)
+			{
+				into.put(x * 256 + y, area);
+			}
+		}
+	}
+
+	/**
+	 * A detached area, and optionally where on the surface you travel to it from.
+	 * <p>
+	 * The entrance is separate from the name because the two are known independently. Naming
+	 * an area needs only the observation that a member is in it; pinning one to the surface
+	 * needs the travel point, which is not in any data the plugin can read - the cache's
+	 * object placements are encrypted, and the area has no world map whose links could be
+	 * followed. Until that coordinate is known for an area, it is named and left unpinned.
+	 */
+	private static final class Detached
+	{
+		private final String name;
+		private final WorldPoint surfaceEntrance;
+
+		Detached(String name, @Nullable WorldPoint surfaceEntrance)
+		{
+			this.name = name;
+			this.surfaceEntrance = surfaceEntrance;
+		}
 	}
 
 	private static volatile MapAreas instance;
@@ -179,12 +225,13 @@ public final class MapAreas
 
 		if (area == null)
 		{
-			String detached = DETACHED_AREAS.get(square);
+			Detached detached = DETACHED_AREAS.get(square);
 			if (detached != null)
 			{
-				// Somewhere the world map has no map for and nothing above. Naming it without
-				// a pin is the whole point: see DETACHED_AREAS.
-				return new Located(detached, null, null);
+				// Somewhere the world map has no map for, and nothing above it to project to.
+				// Pinned at its travel point when that is known, named and left unpinned when
+				// it is not; either way the invented position is gone. See DETACHED_AREAS.
+				return new Located(detached.name, detached.surfaceEntrance, null);
 			}
 		}
 

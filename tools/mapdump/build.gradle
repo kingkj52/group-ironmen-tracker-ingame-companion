@@ -24,3 +24,10 @@ tasks.withType(JavaCompile).configureEach {
 	options.encoding = 'UTF-8'
 	options.release.set(11)
 }
+
+// Prints which map regions have terrain in a square range, for reading a detached area's
+// real extent off the cache instead of inferring it from a single observed position.
+tasks.register('regionProbe', JavaExec) {
+	classpath = sourceSets.main.runtimeClasspath
+	mainClass = 'RegionProbe'
+}

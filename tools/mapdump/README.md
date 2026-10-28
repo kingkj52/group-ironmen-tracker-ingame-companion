@@ -51,3 +51,18 @@ quickest way to eyeball whether a game update moved something.
 This tool depends on `net.runelite:cache`. It is a build-time utility and is **not** part of
 the plugin build — the plugin itself has no dependencies beyond `runelite-client`, and the
 generated JSON is checked in so the plugin builds without ever running this.
+
+## Finding a detached area's extent
+
+Some places have terrain but no world map of their own, Guardians of the Rift among them. A
+member there cannot be resolved from the generated data at all, so `MapAreas.DETACHED_AREAS`
+names them from a short hand-entered list of map squares. To size an entry, print the terrain
+around a known coordinate:
+
+```bash
+./gradlew regionProbe --args="$HOME/.runelite/jagexcache/oldschool/LIVE 53 60 143 152"
+```
+
+The arguments are the cache, then the region x and y range to scan. Terrain existing for a
+region does not mean the world map draws it, which is the whole problem; what the grid gives
+you is how far the area plausibly runs, so the box is not sized from a single point.

@@ -88,6 +88,47 @@ public class MapAreasTest
 	}
 
 	@Test
+	public void coversTheWholeArenaAndNotJustItsTransportTile()
+	{
+		// The first attempt keyed on the single square containing the transport, and members
+		// standing elsewhere in the arena still ended up in the sea. The transport sits three
+		// tiles from that square's northern edge, so the arena spans at least two squares.
+		int[][] insideTheArena = {
+			{3615, 9469},   // the transport itself
+			{3615, 9475},   // a few tiles north, into the next square
+			{3600, 9500},
+			{3630, 9440},
+			{3570, 9480},   // the western square
+			{3660, 9500},   // the eastern square
+		};
+
+		for (int[] p : insideTheArena)
+		{
+			MapAreas.Located located = areas.locate(at(p[0], p[1]));
+			assertNotNull(located);
+			assertNull("(" + p[0] + "," + p[1] + ") must not be pinned to the surface",
+				located.getEntrance());
+			assertEquals("(" + p[0] + "," + p[1] + ") should be named",
+				"Guardians of the Rift", located.describe());
+		}
+	}
+
+	@Test
+	public void theDetachedBoxDoesNotSwallowItsMappedNeighbours()
+	{
+		// The box is generous, so the areas bordering it must still win. Both of these are
+		// real maps the cache describes, and a detached entry is only consulted when no map
+		// claims the square.
+		MapAreas.Located mosLeHarmless = areas.locate(at(3745, 9385));
+		assertNotNull(mosLeHarmless);
+		assertEquals("Mos Le'Harmless Cave", mosLeHarmless.getAreaName());
+
+		MapAreas.Located desert = areas.locate(at(3490, 9480));
+		assertNotNull(desert);
+		assertEquals("Kharidian Desert Underground", desert.getAreaName());
+	}
+
+	@Test
 	public void fallsBackToProjectionWhenTheCacheHasNoLink()
 	{
 		// The Barrows tunnels have no intermap link, but like every area in the underground

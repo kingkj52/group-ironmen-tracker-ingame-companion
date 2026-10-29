@@ -14,8 +14,8 @@ import java.util.Set;
  * misplaced. This is how to size the next one properly: find the square the known point falls
  * in, then see how far the contiguous terrain actually runs.
  * <p>
- * Terrain (the map definition) is not encrypted, so no XTEA keys are needed; only the
- * locations data is, and this does not read it.
+ * No XTEA keys are needed. Neither terrain nor, as locProbe shows, the object placements are
+ * encrypted in this cache, so the null key provider below is not a limitation.
  */
 public class RegionProbe
 {

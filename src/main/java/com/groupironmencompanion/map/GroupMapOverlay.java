@@ -189,6 +189,20 @@ public class GroupMapOverlay extends Overlay
 		}
 
 		rows = Collections.unmodifiableList(drawn);
+
+		// Ask World Map Plus which of these it can show, so that a click can decide without
+		// waiting. Rate-limited and deduplicated inside the bridge, so this is cheap.
+		List<WorldPoint> positions = new ArrayList<>(members.size());
+		for (GroupMember member : members)
+		{
+			WorldPoint position = member.getWorldPoint();
+			if (position != null)
+			{
+				positions.add(position);
+			}
+		}
+		worldMapPlus.requestCoverage(positions);
+
 		return null;
 	}
 
@@ -230,9 +244,23 @@ public class GroupMapOverlay extends Overlay
 			return;
 		}
 
-		// World Map Plus, when it is installed, shows the member where they really are, underground or
-		// not. The game's own map is still moved below for everyone who does not use it.
+		// World Map Plus, when it is installed, shows the member where they really are,
+		// underground or not.
 		worldMapPlus.focus(truePosition, member.getName());
+
+		if (worldMapPlus.isExactlyCovered(truePosition))
+		{
+			// It has imagery of the tile they are standing on, so it is about to show them
+			// there and the game's map underneath is better left where the user had it.
+			// Moving it as well would drag the view to a surface entrance they did not ask
+			// for, which for a detached area is somewhere else entirely: click a member in
+			// Guardians of the Rift and the map beneath would jump to the Wizards' Tower.
+			//
+			// This is known in advance rather than awaited, because the answer arrives a tick
+			// or more after the question and a click has to act now. Positions are asked
+			// about while the map is open, so by the time anybody clicks the answer is in.
+			return;
+		}
 
 		WorldMap worldMap = client.getWorldMap();
 		if (worldMap == null)

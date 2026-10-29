@@ -32,10 +32,12 @@ import net.runelite.client.events.PluginMessage;
  * <h2>The reply path, as actually shipped</h2>
  *
  * Settled with the World Map Plus author and then read back off their source rather than taken
- * from the agreement, which is just as well: the map kinds were agreed as surface, underground,
- * instance, minigame and other, and shipped as surface, submap, extra and area. Nothing here
- * depends on them, but a consumer that had switched on the agreed words would have matched
- * none of them.
+ * from the agreement, which is just as well: the map kinds were planned as surface,
+ * underground, instance, minigame and other, and shipped as surface, submap, extra and area.
+ * Nothing here depends on them, but a consumer that had switched on the planned words would
+ * have matched none of them. The shipped words are the settled ones, and are the better set:
+ * they say where a map came from, which that plugin knows, rather than what kind of place it
+ * depicts, which it would be guessing at.
  * <pre>
  *   "covers"  data { "points": List&lt;WorldPoint&gt; (max 16), "id": String }
  *             also accepts the single-point form { "point": WorldPoint, "id": String }
@@ -85,8 +87,15 @@ public class WorldMapPlusBridge
 	private static final long ANSWER_TTL_MILLIS = 60_000;
 
 	/**
-	 * Least time between questions. Their limit is eight a second; one a second is far below
-	 * it and still settles a group's worth of positions within a few ticks of the map opening.
+	 * Least time between questions. One a second settles a group's worth of positions within a
+	 * few ticks of the map opening, which is long before anyone clicks.
+	 * <p>
+	 * Their limit of eight a second is <b>shared across every plugin asking</b>, not ours to
+	 * spend, so this stays far below it rather than close to it. Over the limit a question is
+	 * dropped and never answered, which reaches us as silence and so as "not covered" - safe,
+	 * since the caller then places the member itself, and self-correcting, since a tile with no
+	 * answer is asked about again. Worth knowing before anyone raises this: the headroom is not
+	 * ours alone.
 	 */
 	private static final long ASK_INTERVAL_MILLIS = 1_000;
 

@@ -78,11 +78,8 @@ public class MapAreasTest
 	@Test
 	public void pinsADetachedAreaAtThePlaceYouTravelToItFrom()
 	{
-		// Guardians of the Rift has no world map of its own and nothing above it, so
-		// projecting it out of the underground band landed in the open sea east of the Ruins
-		// of Uzer and presented that as fact. You actually get there through the portal in the
-		// Wizards' Tower basement, reached by the ladder in the tower, and the cache pairs
-		// (3103, 9576) with (3104, 3162) for exactly that trip.
+		// Projecting the Rift used to land in the sea east of Uzer. You get there from the
+		// Wizards' Tower, whose ladder the cache links to the basement portal.
 		MapAreas.Located located = areas.locate(at(3615, 9469));
 		assertNotNull(located);
 		assertNotNull("a detached area with a known travel point should be pinned at it",
@@ -96,9 +93,7 @@ public class MapAreasTest
 	@Test
 	public void coversTheWholeArenaAndNotJustItsTransportTile()
 	{
-		// The first attempt keyed on the single square containing the transport, and members
-		// standing elsewhere in the arena still ended up in the sea. The transport sits three
-		// tiles from that square's northern edge, so the arena spans at least two squares.
+		// Keying on just the transport's square missed most of the arena.
 		int[][] insideTheArena = {
 			{3615, 9469},   // the transport itself
 			{3615, 9475},   // a few tiles north, into the next square
@@ -126,9 +121,7 @@ public class MapAreasTest
 	@Test
 	public void theDetachedBoxDoesNotSwallowItsMappedNeighbours()
 	{
-		// The box is generous, so the areas bordering it must still win. Both of these are
-		// real maps the cache describes, and a detached entry is only consulted when no map
-		// claims the square.
+		// The box is generous, so the real areas bordering it must still win.
 		MapAreas.Located mosLeHarmless = areas.locate(at(3745, 9385));
 		assertNotNull(mosLeHarmless);
 		assertEquals("Mos Le'Harmless Cave", mosLeHarmless.getAreaName());
@@ -164,12 +157,8 @@ public class MapAreasTest
 		assertNotNull(twentyNorth.getEntrance());
 		assertEquals("Hunter Guild Caverns", twentyNorth.getEntranceName());
 
-		// The two ends of that walk cross the edge of Varlamore Underground, which the cache
-		// now describes: inside it the area's own exits place the marker, outside it the
-		// projection does, and the two disagree by a tile. Both land on the same entrance,
-		// which is what matters. A tile of drift is invisible on the world map, and the marker
-		// layer holds the entrance steady over a far wider radius anyway; what this guards
-		// against is the marker tracking the member's every step across the overworld.
+		// The walk crosses the edge of Varlamore Underground, and the two sides place the
+		// marker a tile apart. Same entrance either way, which is what matters.
 		assertTrue("the entrance must not move with the member",
 			inside.getEntrance().distanceTo2D(twentyNorth.getEntrance()) <= 2);
 	}

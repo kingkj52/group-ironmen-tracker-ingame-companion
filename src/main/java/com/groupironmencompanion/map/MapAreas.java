@@ -53,28 +53,13 @@ public final class MapAreas
 	private static final int ENTRANCE_SNAP_RADIUS = 64;
 
 	/**
-	 * Places in the underground band that are not under anything, keyed by map square.
+	 * Places in the underground band that aren't under anything, by map square.
 	 * <p>
-	 * The projection below assumes an area sits 6400 tiles directly beneath the surface it
-	 * belongs to. That holds for the Barrows tunnels and most caves. It does not hold for a
-	 * detached pocket with no world map of its own: subtract 6400 from Guardians of the Rift
-	 * and the result is the open sea east of Morytania, which is what the marker used to
-	 * claim.
-	 * <p>
-	 * Nothing in the cache separates the two cases. Both have no area, no intermap link, and
-	 * no entrance within snapping distance, and both project onto squares the overworld draws,
-	 * because the overworld draws sea. The gap in distance-to-nearest-entrance is 85 tiles
-	 * against 125, with a smooth spread of a thousand other squares across that range, so
-	 * there is no threshold to find.
-	 * <p>
-	 * So this is a short, deliberately hand-entered list, and the only positional data in the
-	 * plugin that is not generated. Entries carry a name and no position, which is the point:
-	 * the member is named rather than pinned. They are not lost by it, because the world map
-	 * draws these areas at their real coordinates, far north of the overworld where the
-	 * detached maps are laid out, and their own marker is already there.
-	 * <p>
-	 * To add one: stand in the area, take the coordinates, and pack them the way
-	 * {@link #squareOf} does.
+	 * The projection below assumes an area sits 6400 tiles under its surface. True for caves
+	 * and the Barrows tunnels, but not for somewhere like Guardians of the Rift, which has no
+	 * map of its own: projecting it lands in the sea east of Morytania. Nothing in the cache
+	 * tells the two apart, so these are listed by hand. Each has a name and, if known, the
+	 * surface spot you travel from. To size a new one, use tools/mapdump's regionProbe.
 	 */
 	private static final Map<Integer, Detached> DETACHED_AREAS = detachedAreas();
 
@@ -82,22 +67,11 @@ public final class MapAreas
 	{
 		Map<Integer, Detached> detached = new HashMap<>();
 
-		// Guardians of the Rift. The transport in and out of the arena is at (3615, 9469),
-		// which is square (56, 147) at an offset of 31 east and 61 north within it. Sitting
-		// three tiles from that square's northern edge means the arena necessarily continues
-		// into (56, 148), and being mid-square on the x axis means it may reach either side,
-		// so the box is a square wider in each direction than the one observed point proves.
-		//
-		// Over-covering is close to free here. This map is only consulted when no real area
-		// claims the square, and the box is hemmed in by areas that do: Kharidian Desert
-		// Underground to the west, Mos Le'Harmless Cave to the east. The cost of guessing too
-		// small is that the bug comes back for part of the arena; too large, and some other
-		// unmapped pocket borrows the wrong name while still losing the pin it should not have
-		// had.
-		// You reach the arena through the portal in the Wizards' Tower basement, and the
-		// basement itself from the ladder in the tower. That ladder is the surface end, and it
-		// is not a guess: the cache's own intermap links pair (3103, 9576) with (3104, 3162),
-		// so the coordinate comes from the same data everything else here does.
+		// The arena's transport is at (3615, 9469), three tiles from the top of square
+		// (56, 147), so it runs into (56, 148) and the box is a square wider each way. Only
+		// used where no real area claims the square, and real ones border it on both sides.
+		// You get there from the Wizards' Tower basement; the cache links its ladder (3104, 3162)
+		// to the basement (3103, 9576).
 		addBox(detached, 55, 57, 147, 148,
 			new Detached("Guardians of the Rift", new WorldPoint(3104, 3162, 0)));
 
@@ -116,21 +90,6 @@ public final class MapAreas
 		}
 	}
 
-	/**
-	 * A detached area, and optionally where on the surface you travel to it from.
-	 * <p>
-	 * The entrance is separate from the name because the two are established independently.
-	 * Naming an area needs only the observation that a member is in it. Pinning one needs the
-	 * travel point, and that has to be found, because a detached area by definition has no
-	 * world map of its own whose exits could be read. The Rift's came from the far end: the
-	 * portal arrives in the Wizards' Tower basement, which is inside a mapped area, so the
-	 * cache's links do carry the trip out to the surface.
-	 * <p>
-	 * Where that does not work, the cache's object placements are readable, keys and all, and
-	 * {@code tools/mapdump}'s locProbe shows it. An earlier version of this comment claimed
-	 * they were encrypted and they are not; the locations archive opens with no XTEA key at
-	 * all. So a future entry has somewhere to look rather than needing to be measured in game.
-	 */
 	private static final class Detached
 	{
 		private final String name;
@@ -239,9 +198,7 @@ public final class MapAreas
 			Detached detached = DETACHED_AREAS.get(square);
 			if (detached != null)
 			{
-				// Somewhere the world map has no map for, and nothing above it to project to.
-				// Pinned at its travel point when that is known, named and left unpinned when
-				// it is not; either way the invented position is gone. See DETACHED_AREAS.
+				// No map, nothing above it. Pin it where you travel from, if we know.
 				return new Located(detached.name, detached.surfaceEntrance, null);
 			}
 		}

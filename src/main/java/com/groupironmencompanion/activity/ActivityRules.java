@@ -220,7 +220,8 @@ final class ActivityRules
 
 		if (context.isGroupMember.test(target))
 		{
-			return new Activity(Activity.Kind.WITH_MEMBER, "With " + target, "With " + target, null, null, "", since);
+			return new Activity(Activity.Kind.WITH_MEMBER, "With " + target, "With " + target, null, null, "", since)
+				.withTarget(target);
 		}
 
 		int health = interaction.getHealthPercent();
@@ -228,24 +229,44 @@ final class ActivityRules
 		{
 			String suffix = health >= 0 ? " (" + health + "%)" : "";
 			return new Activity(Activity.Kind.FIGHTING, "Fighting " + target, "Fighting " + target, null, null,
-				suffix, since);
+				suffix, since).withSkill(fightingSkill(history, recent)).withTarget(target);
 		}
 
 		if (target.toLowerCase(Locale.ROOT).contains("fishing spot")
 			|| history.gainedSince(recent, GroupSkill.FISHING))
 		{
 			return new Activity(Activity.Kind.FISHING, "Fishing", "Fishing", "at", place(context, position), "",
-				since);
+				since).withSkill(GroupSkill.FISHING).withTarget(target);
 		}
 
 		if (history.gainedSince(recent, GroupSkill.THIEVING))
 		{
 			return new Activity(Activity.Kind.PICKPOCKETING, "Pickpocketing " + target, "Pickpocketing " + target,
-				null, null, "", since);
+				null, null, "", since).withSkill(GroupSkill.THIEVING).withTarget(target);
 		}
 
 		return new Activity(Activity.Kind.TALKING, "Talking to " + target, "Talking to " + target, null, null, "",
-			since);
+			since).withTarget(target);
+	}
+
+	/**
+	 * The combat skill getting the most XP lately, Magic included, or null. Tells a mage from a
+	 * ranger without having to recognise their weapon by name.
+	 */
+	@Nullable
+	private static GroupSkill fightingSkill(MemberHistory history, Instant recent)
+	{
+		GroupSkill best = null;
+		int most = 0;
+		for (MemberHistory.XpGain gain : history.latestGains(recent))
+		{
+			if ((COMBAT.contains(gain.skill) || gain.skill == GroupSkill.MAGIC) && gain.amount > most)
+			{
+				best = gain.skill;
+				most = gain.amount;
+			}
+		}
+		return best;
 	}
 
 	/**
@@ -278,11 +299,12 @@ final class ActivityRules
 		if (combat)
 		{
 			String suffix = history.gainedSince(now.minus(XP_WINDOW), GroupSkill.SLAYER) ? " (Slayer task)" : "";
-			return new Activity(Activity.Kind.SKILLING, "Fighting", "Fighting", "at", place, suffix, since);
+			return new Activity(Activity.Kind.FIGHTING, "Fighting", "Fighting", "at", place, suffix, since)
+				.withSkill(biggest.skill);
 		}
 
 		String skill = biggest.skill.getDisplayName();
-		return new Activity(Activity.Kind.SKILLING, skill, skill, "at", place, "", since);
+		return new Activity(Activity.Kind.SKILLING, skill, skill, "at", place, "", since).withSkill(biggest.skill);
 	}
 
 	@Nullable

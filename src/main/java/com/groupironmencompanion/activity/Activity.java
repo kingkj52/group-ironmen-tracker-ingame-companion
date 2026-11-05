@@ -1,5 +1,6 @@
 package com.groupironmencompanion.activity;
 
+import com.groupironmencompanion.data.GroupSkill;
 import com.groupironmencompanion.place.Place;
 import java.time.Duration;
 import java.time.Instant;
@@ -21,7 +22,7 @@ public final class Activity
 		OFFLINE,
 		/** Hitpoints reached zero. */
 		DIED,
-		/** A live interaction with a health bar, or with combat experience coming in. */
+		/** A live interaction with a health bar, or combat XP coming in. Only the first has a target. */
 		FIGHTING,
 		/** At a fishing spot, or gaining Fishing experience while interacting. */
 		FISHING,
@@ -56,6 +57,8 @@ public final class Activity
 	private final Place place;
 	private final String suffix;
 	private final Instant since;
+	private final GroupSkill skill;
+	private final String target;
 
 	/**
 	 * @param lead the words before the place, e.g. "Fishing"; empty to start with the place
@@ -67,6 +70,14 @@ public final class Activity
 	Activity(Kind kind, String lead, String bare, @Nullable String preposition, @Nullable Place place,
 		String suffix, Instant since)
 	{
+		this(kind, lead, bare, preposition, place, suffix, since, null, null);
+	}
+
+	private Activity(Kind kind, String lead, String bare, @Nullable String preposition, @Nullable Place place,
+		String suffix, Instant since, @Nullable GroupSkill skill, @Nullable String target)
+	{
+		this.skill = skill;
+		this.target = target;
 		this.kind = kind;
 		this.lead = lead;
 		this.bare = bare;
@@ -92,10 +103,34 @@ public final class Activity
 		return since;
 	}
 
+	/** The skill behind it, where there is one: the text can't say, since all combat reads "Fighting". */
+	@Nullable
+	public GroupSkill getSkill()
+	{
+		return skill;
+	}
+
+	/** Who they're interacting with, when this guess comes from a live interaction. */
+	@Nullable
+	public String getTarget()
+	{
+		return target;
+	}
+
+	Activity withSkill(@Nullable GroupSkill skill)
+	{
+		return new Activity(kind, lead, bare, preposition, place, suffix, since, skill, target);
+	}
+
+	Activity withTarget(@Nullable String target)
+	{
+		return new Activity(kind, lead, bare, preposition, place, suffix, since, skill, target);
+	}
+
 	/** The same activity, but starting when an earlier copy of it did. */
 	Activity startingAt(Instant start)
 	{
-		return new Activity(kind, lead, bare, preposition, place, suffix, start);
+		return new Activity(kind, lead, bare, preposition, place, suffix, start, skill, target);
 	}
 
 	/** Whether two activities say the same thing, ignoring when they started. */

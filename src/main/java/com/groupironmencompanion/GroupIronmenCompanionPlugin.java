@@ -80,11 +80,9 @@ import net.runelite.client.util.HotkeyListener;
  * is its own drawing. It draws nothing on the minimap, and it offers no combat information
  * about anyone outside your own opted-in group.
  * <p>
- * One optional feature, off by default, does draw in the game scene: scene presence puts a
- * translucent figure where a nearby group member is standing, so that farming the same area
- * on separate worlds still looks cooperative. Those figures are the plugin's own drawing and
- * nothing more - absent from the player and NPC lists, impossible to click or target, unknown
- * to the server - and they are never drawn in the Wilderness or on a PvP world.
+ * One optional feature, off by default, draws in the game scene: group members on other
+ * worlds as translucent figures. They can't be clicked, the server never knows about them,
+ * and they're never drawn in the Wilderness or on PvP worlds.
  */
 @Slf4j
 @PluginDescriptor(
@@ -97,7 +95,7 @@ public class GroupIronmenCompanionPlugin extends Plugin
 	/** Game ticks between periodic world map marker rebuilds, about six seconds. */
 	private static final int MAP_REFRESH_TICKS = 10;
 
-	/** Least time between requests while nobody is logged in. See {@link #pollIntervalMillis}. */
+	// Poll rate while logged out. See pollIntervalMillis.
 	private static final long IDLE_POLL_MILLIS = 30_000;
 
 
@@ -301,7 +299,7 @@ public class GroupIronmenCompanionPlugin extends Plugin
 		clientThread.invoke(routeTracker::stop);
 		clientThread.invoke(mapMarkers::clear);
 		clientThread.invoke(scenePresence::reset);
-		worldMapPlus.reset();
+		clientThread.invoke(worldMapPlus::reset);
 		groupState.reset();
 	}
 
@@ -311,22 +309,9 @@ public class GroupIronmenCompanionPlugin extends Plugin
 
 	/** Runs off the client thread once a second, and fetches at the configured interval. */
 	/**
-	 * How long to leave between requests, given the configured rate and whether anyone is
-	 * actually playing.
-	 * <p>
-	 * The plugin used to poll at the configured rate whenever it had credentials, logged in or
-	 * not, so a client left sitting on the login screen asked the group server for updates
-	 * every three seconds indefinitely. One person doing that is nothing. The server is a
-	 * free service run by one person, and this plugin is on the hub, so the number of clients
-	 * doing it is not ours to assume: a thousand idle clients at the default rate is well over
-	 * three hundred requests a second for data nobody is looking at.
-	 * <p>
-	 * Backing off rather than stopping, because checking what the group is up to before
-	 * logging in is a real thing to want, and the side panel is on screen at the login screen.
-	 * Half a minute is plenty for reading a panel and still an order of magnitude less traffic.
-	 * <p>
-	 * Logging in does not wait this out. The interval is compared against the last request, so
-	 * the first poll after the state flips is already due.
+	 * Time between requests. While nobody's logged in it drops to every 30 seconds: the side
+	 * panel still updates at the login screen, but an idle client isn't hitting the group's
+	 * server every few seconds for nothing. Logging in takes effect on the next check.
 	 */
 	static long pollIntervalMillis(int pollSeconds, boolean loggedIn)
 	{
@@ -496,13 +481,8 @@ public class GroupIronmenCompanionPlugin extends Plugin
 	}
 
 	/**
-	 * Per-frame work, in the order the rest of the tick depends on.
-	 * <p>
-	 * The input state goes first because the mouse and key handlers read it, and they read it
-	 * from AWT threads where the client cannot be asked anything directly. Then the scene
-	 * figures are eased toward their reported positions, which is done here rather than on the
-	 * game tick because a position arrives about once a second and snapping to it that rarely
-	 * looks like teleporting.
+	 * Input state first, since the mouse and key handlers read it from AWT threads where they
+	 * can't ask the client. Then the scene figures, every frame so they glide.
 	 */
 	@Subscribe
 	public void onClientTick(ClientTick event)
@@ -599,14 +579,14 @@ public class GroupIronmenCompanionPlugin extends Plugin
 	}
 
 	/**
-	 * Messages from other plugins. Both bridges are handed every message and each ignores
-	 * anything outside its own namespace, so neither has to know about the other.
+	 * Each bridge ignores messages that aren't its own. The World Map Plus bridge's state is
+	 * client-thread only, and any plugin can post from any thread, so it's handed over there.
 	 */
 	@Subscribe
 	public void onPluginMessage(PluginMessage event)
 	{
 		routeTracker.onPluginMessage(event);
-		worldMapPlus.onPluginMessage(event);
+		clientThread.invoke(() -> worldMapPlus.onPluginMessage(event));
 	}
 
 	@Subscribe
@@ -735,10 +715,8 @@ public class GroupIronmenCompanionPlugin extends Plugin
 	{
 		groupState.reset();
 		uploader.reset();
-		// What World Map Plus told us about coverage is about tiles, not about the group, but
-		// a different group means different members in different places and nothing learned
-		// for the old one is worth keeping.
-		worldMapPlus.reset();
+		// Config changes come in off the client thread, where the bridge lives.
+		clientThread.invoke(worldMapPlus::reset);
 		lastPollMillis = 0;
 	}
 

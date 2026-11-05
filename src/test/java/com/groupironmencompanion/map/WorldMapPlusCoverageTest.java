@@ -16,16 +16,10 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
-/**
- * The coverage half of the World Map Plus bridge.
- * <p>
- * Everything here is about taking an answer from another plugin, which is the part worth
- * testing: the payload is built by code this plugin does not own, arrives a tick or more after
- * the question, and can arrive after we have stopped waiting for it.
- */
+/** Taking coverage answers from another plugin, which may be late, duplicated or malformed. */
 public class WorldMapPlusCoverageTest
 {
-	/** Captures what the bridge posts, so a reply can be built for the id it actually sent. */
+	// Captures posts so a reply can echo the id the bridge actually sent.
 	private static final class Capture extends EventBus
 	{
 		private final List<PluginMessage> posted = new ArrayList<>();
@@ -77,15 +71,12 @@ public class WorldMapPlusCoverageTest
 		bridge.onPluginMessage(new PluginMessage("worldmapplus", "covers_reply", data));
 	}
 
-	// ------------------------------------------------------------------
 	// The default is "not covered"
-	// ------------------------------------------------------------------
 
 	@Test
 	public void nothingIsCoveredBeforeAnybodyAnswers()
 	{
-		// Which is also the case where World Map Plus is not installed at all: we ask, nothing
-		// replies, and every caller falls back to its own placement.
+		// Same as World Map Plus not being installed.
 		askAbout(RIFT);
 		assertFalse(bridge.isExactlyCovered(RIFT));
 	}
@@ -96,9 +87,7 @@ public class WorldMapPlusCoverageTest
 		assertFalse(bridge.isExactlyCovered(null));
 	}
 
-	// ------------------------------------------------------------------
 	// Taking an answer
-	// ------------------------------------------------------------------
 
 	@Test
 	public void recordsAnExactAnswerAgainstTheTileItWasAbout()
@@ -113,9 +102,7 @@ public class WorldMapPlusCoverageTest
 	@Test
 	public void coveredButNotExactDoesNotCount()
 	{
-		// Their nearest-map fallback can place a point up to 192 tiles from any imagery. That
-		// is useful to them and useless to us: we only skip our own placement when they have
-		// the actual tile.
+		// "Covered" can mean their nearest map 192 tiles away. We only step aside for exact.
 		String id = askAbout(RIFT);
 		reply(id, Collections.singletonList(true), Collections.singletonList(false),
 			Collections.singletonList("Morytania Underground"));
@@ -134,9 +121,7 @@ public class WorldMapPlusCoverageTest
 		assertFalse(bridge.isExactlyCovered(LUMBRIDGE));
 	}
 
-	// ------------------------------------------------------------------
 	// Answers we must not act on
-	// ------------------------------------------------------------------
 
 	@Test
 	public void ignoresAnAnswerToAnIdWeNeverSent()
@@ -150,8 +135,7 @@ public class WorldMapPlusCoverageTest
 	@Test
 	public void anIdIsAnsweredOnlyOnce()
 	{
-		// Their queue outlives our timeout, so a duplicate or late answer is expected rather
-		// than a fault. Consuming the id on first use means the second one finds nothing.
+		// Their queue outlives our timeout, so late duplicates happen.
 		String id = askAbout(RIFT);
 		reply(id, Collections.singletonList(true), Collections.singletonList(true),
 			Collections.singletonList("Guardians of the Rift"));
@@ -180,9 +164,7 @@ public class WorldMapPlusCoverageTest
 		assertFalse(bridge.isExactlyCovered(RIFT));
 	}
 
-	// ------------------------------------------------------------------
 	// Malformed payloads
-	// ------------------------------------------------------------------
 
 	@Test
 	public void survivesAnAnswerMissingItsLists()
@@ -199,8 +181,7 @@ public class WorldMapPlusCoverageTest
 	@Test
 	public void survivesAnAnswerShorterThanTheQuestion()
 	{
-		// Two tiles asked about, one answer given. The tile with no answer stays unknown
-		// rather than borrowing its neighbour's.
+		// The tile with no answer stays unknown rather than borrowing its neighbour's.
 		String id = askAbout(RIFT, LUMBRIDGE);
 		reply(id, Collections.singletonList(true), Collections.singletonList(true),
 			Collections.singletonList("Guardians of the Rift"));
@@ -224,15 +205,12 @@ public class WorldMapPlusCoverageTest
 		assertFalse(bridge.isExactlyCovered(RIFT));
 	}
 
-	// ------------------------------------------------------------------
 	// Asking
-	// ------------------------------------------------------------------
 
 	@Test
 	public void sendsAnIdTheirRulesAccept()
 	{
-		// They drop any id longer than 64 characters or carrying anything but letters,
-		// digits, underscore, hyphen, dot or colon, and answer nothing at all in that case.
+		// They ignore ids over 64 characters or with anything but letters, digits and _ - . :
 		String id = askAbout(RIFT);
 		assertTrue(id.length() <= 64);
 		assertFalse(id.isEmpty());
@@ -247,8 +225,7 @@ public class WorldMapPlusCoverageTest
 	@Test
 	public void asksForEveryFocusToBeExact()
 	{
-		// Without this their view drifts to the nearest map within 192 tiles, which for a
-		// detached area is black space off the edge of somewhere unrelated.
+		// Otherwise their view drifts to black space off the nearest map.
 		bridge.focus(RIFT, "Someone");
 		assertEquals("focus", bus.last().getName());
 		assertEquals(Boolean.TRUE, bus.last().getData().get("exact"));
@@ -270,7 +247,7 @@ public class WorldMapPlusCoverageTest
 	@Test
 	public void asksAtMostSixteenTilesAtOnce()
 	{
-		// Their cap. Going over it would have the whole question refused.
+		// Their cap; more gets the whole question refused.
 		List<WorldPoint> many = new ArrayList<>();
 		for (int i = 0; i < 40; i++)
 		{

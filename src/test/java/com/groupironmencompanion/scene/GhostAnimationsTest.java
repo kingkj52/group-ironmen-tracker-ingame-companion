@@ -1,104 +1,120 @@
 package com.groupironmencompanion.scene;
 
-import com.groupironmencompanion.scene.GhostAnimations.Activity;
+import com.groupironmencompanion.activity.Activities;
+import com.groupironmencompanion.data.GroupSkill;
+import com.groupironmencompanion.scene.GhostAnimations.Movement;
 import net.runelite.api.gameval.AnimationID;
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
-/** The inference that stands in for animation data the wire format does not carry. */
 public class GhostAnimationsTest
 {
-	// ------------------------------------------------------------------
 	// Movement
-	// ------------------------------------------------------------------
 
 	@Test
-	public void standingStillIsIdle()
+	public void movementSpeeds()
 	{
-		assertEquals(Activity.IDLE, GhostAnimations.movementFor(0, 1));
+		assertEquals(Movement.STILL, GhostAnimations.movementFor(0, 1));
+		assertEquals(Movement.WALKING, GhostAnimations.movementFor(1, 1));
+		assertEquals(Movement.RUNNING, GhostAnimations.movementFor(2, 1));
 	}
 
 	@Test
-	public void oneTilePerTickWalks()
+	public void aDiagonalStepIsAWalk()
 	{
-		assertEquals(Activity.WALKING, GhostAnimations.movementFor(1, 1));
+		assertEquals(Movement.WALKING, GhostAnimations.movementFor(Math.sqrt(2), 1));
 	}
 
 	@Test
-	public void twoTilesPerTickRuns()
+	public void speedIsAveragedOverTheGap()
 	{
-		assertEquals(Activity.RUNNING, GhostAnimations.movementFor(2, 1));
+		assertEquals(Movement.WALKING, GhostAnimations.movementFor(4, 4));
 	}
 
 	@Test
-	public void aDiagonalWalkIsStillAWalk()
+	public void poses()
 	{
-		// A diagonal step covers one tile of game movement but measures as more than one by
-		// straight-line distance, which is why the run threshold sits above 1.0.
-		assertEquals(Activity.WALKING, GhostAnimations.movementFor(Math.sqrt(2), 1));
+		assertEquals(AnimationID.HUMAN_RUNNING, GhostAnimations.poseFor(Movement.RUNNING));
+		assertEquals(AnimationID.HUMAN_WALK_F, GhostAnimations.poseFor(Movement.WALKING));
+		assertEquals(AnimationID.HUMAN_READY, GhostAnimations.poseFor(Movement.STILL));
 	}
 
-	@Test
-	public void speedIsMeasuredAcrossTheWholeGap()
-	{
-		// Four tiles spread over four ticks is a walk, not a run, even though the single
-		// reported jump was four tiles wide.
-		assertEquals(Activity.WALKING, GhostAnimations.movementFor(4, 4));
-	}
-
-	// ------------------------------------------------------------------
-	// Pose and action
-	// ------------------------------------------------------------------
+	// Actions follow the same activity the status text shows
 
 	@Test
-	public void locomotionDrivesThePoseNotTheAction()
+	public void fightingSwingsTheWeaponTheyHold()
 	{
-		assertEquals(AnimationID.HUMAN_RUNNING, GhostAnimations.poseFor(Activity.RUNNING));
-		assertEquals(AnimationID.HUMAN_WALK_F, GhostAnimations.poseFor(Activity.WALKING));
-		assertEquals(AnimationID.HUMAN_READY, GhostAnimations.poseFor(Activity.IDLE));
-
-		assertTrue("a walking figure has no action animation",
-			GhostAnimations.actionFor(Activity.WALKING, WeaponClass.MELEE_SLASH) < 0);
-	}
-
-	@Test
-	public void fightingPicksAnAttackForTheWeaponCategory()
-	{
-		assertEquals(AnimationID.HUMAN_BOW,
-			GhostAnimations.actionFor(Activity.FIGHTING, WeaponClass.BOW));
+		assertEquals(AnimationID.HUMAN_SWORD_SLASH,
+			GhostAnimations.actionFor(Activities.fighting("Goblin", GroupSkill.STRENGTH), WeaponClass.MELEE_SLASH, false));
 		assertEquals(AnimationID.HUMAN_CROSSBOW,
-			GhostAnimations.actionFor(Activity.FIGHTING, WeaponClass.CROSSBOW));
+			GhostAnimations.actionFor(Activities.fighting("Goblin", GroupSkill.RANGED), WeaponClass.CROSSBOW, false));
+	}
+
+	@Test
+	public void combatXpBeatsAWeaponNameWeDidNotRecognise()
+	{
+		// A mage with a staff whose name doesn't contain "staff" still casts.
 		assertEquals(AnimationID.HUMAN_CASTING,
-			GhostAnimations.actionFor(Activity.FIGHTING, WeaponClass.STAFF));
-		assertEquals(AnimationID.HUMAN_UNARMEDPUNCH,
-			GhostAnimations.actionFor(Activity.FIGHTING, WeaponClass.UNARMED));
+			GhostAnimations.actionFor(Activities.fighting("Goblin", GroupSkill.MAGIC), WeaponClass.UNARMED, false));
+		assertEquals(AnimationID.HUMAN_BOW,
+			GhostAnimations.actionFor(Activities.fightingByExperience(GroupSkill.RANGED), WeaponClass.UNARMED, false));
 	}
 
 	@Test
-	public void aFightingFigureStandsRatherThanWalks()
+	public void skillingPlaysThatSkill()
 	{
-		assertEquals(AnimationID.HUMAN_READY, GhostAnimations.poseFor(Activity.FIGHTING));
+		assertEquals(AnimationID.HUMAN_WOODCUTTING_RUNE_AXE,
+			GhostAnimations.actionFor(Activities.skilling(GroupSkill.WOODCUTTING), WeaponClass.UNARMED, false));
+		assertEquals(AnimationID.PICKING_LOW,
+			GhostAnimations.actionFor(Activities.skilling(GroupSkill.FARMING), WeaponClass.UNARMED, false));
+		assertEquals(AnimationID.HUMAN_FISH_ONSPOT,
+			GhostAnimations.actionFor(Activities.fishing("Fishing spot"), WeaponClass.UNARMED, false));
 	}
 
 	@Test
-	public void anActionRepeatsOnAWeaponSpeedCadenceRatherThanLooping()
+	public void magicOnItsOwnCastsButIsNotAFight()
 	{
-		// Looping the swing was the first attempt and it reads as a member who never stops
-		// mid-attack. Four ticks is the common weapon speed, and the gap between swings is
-		// what makes the figure look like it is fighting rather than vibrating.
-		assertTrue("an action must have a gap between repeats",
-			GhostAnimations.ACTION_INTERVAL_TICKS > 1);
+		// Alching: the status says "Magic", so no opponent, but the figure still casts.
+		assertEquals(AnimationID.HUMAN_CASTING,
+			GhostAnimations.actionFor(Activities.skilling(GroupSkill.MAGIC), WeaponClass.MELEE_SLASH, false));
+		assertFalse(GhostAnimations.isFighting(Activities.skilling(GroupSkill.MAGIC)));
+	}
+
+	@Test
+	public void talkingToSomeoneIsNotAnAttack()
+	{
+		// This used to swing at shopkeepers.
+		assertEquals(-1, GhostAnimations.actionFor(Activities.talking("Hans"), WeaponClass.MELEE_SLASH, false));
+		assertFalse(GhostAnimations.isFighting(Activities.talking("Hans")));
+	}
+
+	@Test
+	public void nothingToShowForIdleOrUnknown()
+	{
+		assertEquals(-1, GhostAnimations.actionFor(Activities.idle(), WeaponClass.MELEE_SLASH, false));
+		assertEquals(-1, GhostAnimations.actionFor(null, WeaponClass.MELEE_SLASH, false));
+	}
+
+	@Test
+	public void nobodySwingsOnTheMoveButTheFightGoesOn()
+	{
+		assertEquals(-1, GhostAnimations.actionFor(Activities.fighting("Goblin", GroupSkill.ATTACK), WeaponClass.MELEE_STAB, true));
+		assertTrue(GhostAnimations.isFighting(Activities.fighting("Goblin", GroupSkill.ATTACK)));
+	}
+
+	@Test
+	public void actionsRepeatOnAWeaponSpeedNotEveryTick()
+	{
 		assertEquals(4, GhostAnimations.ACTION_INTERVAL_TICKS);
 	}
 
-	// ------------------------------------------------------------------
-	// Weapon classification
-	// ------------------------------------------------------------------
+	// Weapon names
 
 	@Test
-	public void classifiesTheObviousWeapons()
+	public void classifiesCommonWeapons()
 	{
 		assertEquals(WeaponClass.MELEE_SLASH, WeaponClass.classify("Dragon scimitar"));
 		assertEquals(WeaponClass.MELEE_STAB, WeaponClass.classify("Dragon dagger"));
@@ -108,27 +124,26 @@ public class GhostAnimationsTest
 	}
 
 	@Test
-	public void prefersTheMoreSpecificWordWhenANameContainsSeveral()
+	public void moreSpecificNamesWin()
 	{
-		// "Dragon crossbow" contains "bow", and a staff of the dead contains neither sword nor
-		// blade but must not fall through to unarmed.
 		assertEquals(WeaponClass.CROSSBOW, WeaponClass.classify("Dragon crossbow"));
 		assertEquals(WeaponClass.STAFF, WeaponClass.classify("Staff of the dead"));
 		assertEquals(WeaponClass.STAFF, WeaponClass.classify("Trident of the swamp"));
 	}
 
 	@Test
-	public void anEmptyWeaponSlotIsUnarmed()
+	public void partisansAreStabWeapons()
 	{
-		assertEquals(WeaponClass.UNARMED, WeaponClass.classify(null));
-		assertEquals(WeaponClass.UNARMED, WeaponClass.classify(""));
+		// Used to land under STAFF and cast spells.
+		assertEquals(WeaponClass.MELEE_STAB, WeaponClass.classify("Keris partisan"));
+		assertEquals(WeaponClass.MELEE_STAB, WeaponClass.classify("Keris partisan of the sun"));
 	}
 
 	@Test
-	public void somethingUnrecognisedFallsBackToUnarmed()
+	public void unknownOrEmptyIsUnarmed()
 	{
-		// A skilling tool or a novelty item in the weapon slot. Punching is a better guess
-		// than picking an attack style at random.
+		assertEquals(WeaponClass.UNARMED, WeaponClass.classify(null));
+		assertEquals(WeaponClass.UNARMED, WeaponClass.classify(""));
 		assertEquals(WeaponClass.UNARMED, WeaponClass.classify("Bucket"));
 	}
 }

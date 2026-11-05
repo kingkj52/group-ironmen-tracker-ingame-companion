@@ -13,57 +13,23 @@ import net.runelite.client.eventbus.EventBus;
 import net.runelite.client.events.PluginMessage;
 
 /**
- * Brings the World Map Plus plugin's map to a member, when that plugin is installed.
+ * Talks to the World Map Plus plugin, if it's installed, over {@link PluginMessage}s.
  * <p>
- * World Map Plus draws its own map over the game's, so jumping the game's map under it would show the
- * member's surface entrance at best. It listens for a {@link PluginMessage} to centre its map on a
- * place, which can be a place underground, so the member is shown where they really are.
- * <p>
- * The member markers themselves need nothing here: they are world map points, which World Map Plus
- * reads and draws on its own map. If the plugin is not installed nothing subscribes to the message and
- * the post does nothing.
- * <p>
- * Contract, from World Map Plus's README:
+ * Member markers need nothing from here; World Map Plus draws world map points on its own. This
+ * is for jumping its view to a member, and asking which tiles it has a map for.
  * <pre>
  *   namespace "worldmapplus"
- *   name      "focus"  data { "point": WorldPoint, "zoom": Number (optional), "name": String (optional) }
+ *   "focus"  { point, zoom?, name?, exact?, id? }
+ *            exact: if no map has imagery of the tile, leave the view alone
+ *   "covers" { points: List&lt;WorldPoint&gt; (max 16), id }
+ *   -&gt; "covers_reply" { id, covered[], exact[], mapNames[], mapKinds[] }, parallel to points
  * </pre>
- *
- * <h2>The reply path, as actually shipped</h2>
- *
- * Settled with the World Map Plus author and then read back off their source rather than taken
- * from the agreement, which is just as well: the map kinds were planned as surface,
- * underground, instance, minigame and other, and shipped as surface, submap, extra and area.
- * Nothing here depends on them, but a consumer that had switched on the planned words would
- * have matched none of them. The shipped words are the settled ones, and are the better set:
- * they say where a map came from, which that plugin knows, rather than what kind of place it
- * depicts, which it would be guessing at.
- * <pre>
- *   "covers"  data { "points": List&lt;WorldPoint&gt; (max 16), "id": String }
- *             also accepts the single-point form { "point": WorldPoint, "id": String }
- *   -&gt; "covers_reply" { "id", "covered", "exact", "mapNames", "mapKinds" }
- *      the four lists run parallel to the points asked about
- *
- *   "focus"   gains optional { "exact": Boolean, "id": String }
- *   -&gt; "focus_result" { "id", "ok": Boolean, "mapName", "mapKind", "reason" }
- *      reason "no_map" when exact was asked and no map has imagery of that tile, in which
- *      case the view is left alone rather than drifting to the nearest map
- * </pre>
- * Map kinds are strings - surface, submap, extra, area - deliberately not ids, so that
- * plugin's internal numbering does not become permanent API. We do not read them; coverage
- * alone decides what we do.
+ * Replies come a tick or more later (they're queued on that plugin's game tick, never sent from
+ * inside its handler), and not at all if it isn't installed. So: wait about two seconds, then
+ * assume no. They hold replies for five seconds, longer than we wait, so ignore ids we've
+ * already given up on. The ask limit of eight a second is shared with every other plugin.
  * <p>
- * Three things shape the consumer. Replies are <b>deferred</b>: they are queued and posted
- * from that plugin's game tick, never from inside its subscriber, so a reply arrives a tick or
- * more after the request and never re-entrantly during our own post. A {@code focus_result}
- * of "ok" means the view has already moved. And silence is the normal answer when the plugin
- * is absent, so every call needs a timeout - about two seconds - after which we fall back to
- * our own placement.
- * <p>
- * Replies carry back the id we sent and are dropped at their end after five seconds, which is
- * longer than that timeout. So a reply can arrive for a request we have already given up on,
- * and the consumer has to ignore ids it is no longer waiting for rather than acting on a
- * late answer.
+ * Client thread only.
  */
 @Singleton
 public class WorldMapPlusBridge
@@ -73,47 +39,23 @@ public class WorldMapPlusBridge
 	private static final String MESSAGE_COVERS = "covers";
 	private static final String REPLY_COVERS = "covers_reply";
 
-	/** Pixels per tile to look at a member from: close enough to see where they are standing. */
+	// Close enough to see where they're standing.
 	static final double MEMBER_ZOOM = 6.0;
 
-	/** The most tiles one question may carry, matching World Map Plus's own cap. */
 	private static final int MAX_POINTS = 16;
 
-	/**
-	 * How long a cached answer is trusted. Coverage changes only when that plugin is updated,
-	 * so this is short for the sake of a stale answer after a map is added, not because the
-	 * truth moves.
-	 */
+	// Only changes when that plugin updates; short so a newly added map shows up.
 	private static final long ANSWER_TTL_MILLIS = 60_000;
 
-	/**
-	 * Least time between questions. One a second settles a group's worth of positions within a
-	 * few ticks of the map opening, which is long before anyone clicks.
-	 * <p>
-	 * Their limit of eight a second is <b>shared across every plugin asking</b>, not ours to
-	 * spend, so this stays far below it rather than close to it. Over the limit a question is
-	 * dropped and never answered, which reaches us as silence and so as "not covered" - safe,
-	 * since the caller then places the member itself, and self-correcting, since a tile with no
-	 * answer is asked about again. Worth knowing before anyone raises this: the headroom is not
-	 * ours alone.
-	 */
+	// Well under their shared limit, and still answered long before anyone clicks.
 	private static final long ASK_INTERVAL_MILLIS = 1_000;
 
-	/** How long to wait for an answer before assuming the plugin is not there. */
 	private static final long REPLY_TIMEOUT_MILLIS = 2_000;
 
 	private final EventBus eventBus;
 
-	/**
-	 * What is known about each tile asked about, keyed by the tile.
-	 * <p>
-	 * Keyed by tile rather than by map square because a square can straddle the edge of a map,
-	 * and a wrong answer at an edge is the kind that only shows up for one member standing in
-	 * one spot.
-	 */
+	// By tile rather than map square, since a square can straddle a map's edge.
 	private final Map<WorldPoint, Coverage> known = new HashMap<>();
-
-	/** Questions waiting for an answer, by the id sent. */
 	private final Map<String, Pending> pending = new HashMap<>();
 
 	private long lastAskMillis;
@@ -125,7 +67,6 @@ public class WorldMapPlusBridge
 		this.eventBus = eventBus;
 	}
 
-	/** Asks World Map Plus to centre on a place, with a name for the mark it puts there. */
 	public void focus(WorldPoint point, String name)
 	{
 		if (point == null)
@@ -136,21 +77,14 @@ public class WorldMapPlusBridge
 		data.put("point", point);
 		data.put("zoom", MEMBER_ZOOM);
 		data.put("name", name == null ? "" : name);
-		// Without this, a point no map has imagery of sends their view to whichever map is
-		// nearest within 192 tiles, which for a detached area is black space off the edge of
-		// something unrelated. Asking for exact means they decline and leave the view alone.
+		// Otherwise a tile with no map sends their view to black space off the nearest one.
 		data.put("exact", Boolean.TRUE);
 		eventBus.post(new PluginMessage(NAMESPACE, MESSAGE_FOCUS, data));
 	}
 
 	/**
-	 * Whether World Map Plus has imagery of this exact tile, as far as we have been told.
-	 * <p>
-	 * False whenever the answer is not in hand, which covers the plugin being absent, the
-	 * question not having been asked yet, and the answer having expired. Callers therefore
-	 * treat this as "known to be covered" rather than "not known to be uncovered", and fall
-	 * back to their own placement on false. That makes the uninstalled case the default rather
-	 * than a special case.
+	 * Whether World Map Plus has imagery of this tile, as far as we know. False if we haven't
+	 * heard, so not having the plugin is just the normal "no".
 	 */
 	public boolean isExactlyCovered(WorldPoint point)
 	{
@@ -163,16 +97,13 @@ public class WorldMapPlusBridge
 	}
 
 	/**
-	 * Asks about any of these tiles not already answered for. Call from the game tick.
-	 * <p>
-	 * Rate-limited, and silent when there is nothing new to ask, so this is cheap to call
-	 * whenever the map is open. The answers arrive a tick or more later, which is why it is
-	 * worth asking before anybody clicks rather than at the moment they do.
+	 * Asks about any tiles we don't have a fresh answer for. Cheap to call often: it's rate
+	 * limited and does nothing when there's nothing new. Ask ahead of time, since a click
+	 * can't wait for the reply.
 	 */
 	public void requestCoverage(Collection<WorldPoint> points)
 	{
 		expire();
-
 		if (points == null || points.isEmpty())
 		{
 			return;
@@ -197,15 +128,13 @@ public class WorldMapPlusBridge
 				asking.add(point);
 			}
 		}
-
 		if (asking.isEmpty())
 		{
 			return;
 		}
 
 		lastAskMillis = now;
-
-		// Their id rules are strict: short, and letters, digits or _ - . : only.
+		// Their ids must be short and only letters, digits and _ - . :
 		String id = "gim-" + (nextId++);
 		pending.put(id, new Pending(asking, now));
 
@@ -215,10 +144,7 @@ public class WorldMapPlusBridge
 		eventBus.post(new PluginMessage(NAMESPACE, MESSAGE_COVERS, data));
 	}
 
-	/**
-	 * Takes an answer. Called for every plugin message, so it must ignore everything that is
-	 * not one of ours.
-	 */
+	/** Sees every plugin message, so ignores anything that isn't a reply to us. */
 	public void onPluginMessage(PluginMessage message)
 	{
 		if (message == null || !NAMESPACE.equals(message.getNamespace())
@@ -233,48 +159,42 @@ public class WorldMapPlusBridge
 			return;
 		}
 
+		// Unknown or already given up on.
 		Pending asked = pending.remove(asText(data.get("id")));
 		if (asked == null)
 		{
-			// An answer to a question we have already given up on, or one we never asked.
-			// Their queue outlives our timeout, so this is expected rather than odd.
 			return;
 		}
 
-		// The answer also carries "covered", "mapNames" and "mapKinds". None is read: only an
-		// exact tile lets us stand aside, and we never show their map's name. Parsing them to
-		// store them unread would just be three more things to keep in step with their format.
+		// Only "exact" matters to us: we stand aside only when they have the actual tile.
 		List<?> exact = asList(data.get("exact"));
 		if (exact == null)
 		{
 			return;
 		}
 
+		// It's another plugin's data, so don't assume the list is as long as what we asked.
 		long now = System.currentTimeMillis();
 		for (int i = 0; i < asked.points.size(); i++)
 		{
-			// The list runs parallel to the points we sent, but it comes from another plugin,
-			// so every index is checked rather than assumed. A point the answer is too short
-			// to cover stays unknown, which reads as not covered.
 			boolean isExact = i < exact.size() && Boolean.TRUE.equals(exact.get(i));
 			known.put(asked.points.get(i), new Coverage(isExact, now));
 		}
 	}
 
-	/** Forgets stale answers and questions that were never answered. */
-	private void expire()
-	{
-		long now = System.currentTimeMillis();
-		known.values().removeIf(Coverage::isStale);
-		pending.values().removeIf(waiting -> now - waiting.at > REPLY_TIMEOUT_MILLIS);
-	}
-
-	/** Drops everything learned, on shutdown or when the group changes. */
+	/** Forgets everything, when the group changes or the plugin stops. */
 	public void reset()
 	{
 		known.clear();
 		pending.clear();
 		lastAskMillis = 0;
+	}
+
+	private void expire()
+	{
+		long now = System.currentTimeMillis();
+		known.values().removeIf(Coverage::isStale);
+		pending.values().removeIf(waiting -> now - waiting.at > REPLY_TIMEOUT_MILLIS);
 	}
 
 	@Nullable
@@ -289,7 +209,6 @@ public class WorldMapPlusBridge
 		return value instanceof List ? (List<?>) value : null;
 	}
 
-	/** Whether World Map Plus has imagery of one tile, and when it said so. */
 	private static final class Coverage
 	{
 		private final boolean exact;
@@ -307,7 +226,6 @@ public class WorldMapPlusBridge
 		}
 	}
 
-	/** A question sent, kept so its answer can be matched back to the tiles it was about. */
 	private static final class Pending
 	{
 		private final List<WorldPoint> points;

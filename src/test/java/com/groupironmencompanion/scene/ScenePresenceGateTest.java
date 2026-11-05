@@ -8,13 +8,7 @@ import org.junit.Test;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
-/**
- * The world-type half of the gate, which is the half that can be tested without a client.
- * <p>
- * These are not decoration. The feature is only defensible because it refuses to draw where a
- * figure could be mistaken for a threat, so the rule deserves a test that fails loudly if
- * somebody trims the list.
- */
+/** The world type rules. If someone trims the PvP list, this should fail. */
 public class ScenePresenceGateTest
 {
 	@Test
@@ -35,38 +29,32 @@ public class ScenePresenceGateTest
 			WorldType.LAST_MAN_STANDING,
 			WorldType.PVP_ARENA})
 		{
-			assertTrue(type + " must suppress ghosts",
-				ScenePresenceGate.isForbiddenWorld(EnumSet.of(type)));
+			assertTrue(type.name(), ScenePresenceGate.isForbiddenWorld(EnumSet.of(type)));
 		}
 	}
 
 	@Test
-	public void refusesAWorldThatIsOnlyPartlyForbidden()
+	public void aMembersPvpWorldIsStillPvp()
 	{
-		// A members PvP world is still a PvP world.
 		assertTrue(ScenePresenceGate.isForbiddenWorld(EnumSet.of(WorldType.MEMBERS, WorldType.PVP)));
 	}
 
 	@Test
-	public void inheritsRuneLitesOwnIdeaOfAPvpWorld()
+	public void anythingRuneLiteCallsPvpIsRefused()
 	{
-		// The explicit list cannot know about a world type added upstream later, so whatever
-		// RuneLite itself counts as PvP must be refused too.
+		// So a PvP world type added after this was written is covered.
 		for (WorldType type : WorldType.values())
 		{
 			if (WorldType.isPvpWorld(EnumSet.of(type)))
 			{
-				assertTrue(type + " is a PvP world to RuneLite and must suppress ghosts",
-					ScenePresenceGate.isForbiddenWorld(EnumSet.of(type)));
+				assertTrue(type.name(), ScenePresenceGate.isForbiddenWorld(EnumSet.of(type)));
 			}
 		}
 	}
 
 	@Test
-	public void refusesWhenTheWorldIsNotKnownYet()
+	public void refusesWhileTheWorldIsUnknown()
 	{
-		// Logging in, hopping, or any state where the client has not said what this world is.
-		// Drawing nothing is the only safe default.
 		assertTrue(ScenePresenceGate.isForbiddenWorld(null));
 	}
 }

@@ -3,16 +3,10 @@ package com.groupironmencompanion.scene;
 import java.util.Locale;
 
 /**
- * Broad weapon categories, enough to pick a plausible attack animation.
+ * Rough weapon types, enough to pick an attack animation.
  * <p>
- * The real weapon category and its per-stance animation ids live in the game cache, and are
- * not reachable through the plugin API: {@code ItemComposition} exposes only the inventory
- * icon model, not the worn models or the stance table. Resolving them properly means
- * extracting a weapon table at build time, the same way the world map areas are generated.
- * <p>
- * Until that exists, classification is by item name. That is crude, and deliberately so: a
- * misread weapon costs nothing more than a ghost swinging the wrong way, and the alternative
- * is shipping a generated table before the feature has proven itself worth one.
+ * Goes by item name. The real weapon type is in the cache but not in the API, and getting a
+ * name wrong only means a ghost swings the wrong way.
  */
 enum WeaponClass
 {
@@ -25,14 +19,7 @@ enum WeaponClass
 	THROWN,
 	STAFF;
 
-	/**
-	 * Categorises a worn weapon by its name.
-	 * <p>
-	 * Order matters: the checks run from most to least specific, because many names contain
-	 * several of these words ("crystal bow", "dragon crossbow", "staff of the dead").
-	 *
-	 * @param itemName the weapon's name, or null when the slot is empty
-	 */
+	/** Most specific match first, since names like "dragon crossbow" contain several. */
 	static WeaponClass classify(String itemName)
 	{
 		if (itemName == null || itemName.isEmpty())
@@ -51,7 +38,7 @@ enum WeaponClass
 			return BOW;
 		}
 		if (name.contains("staff") || name.contains("wand") || name.contains("sceptre")
-			|| name.contains("trident") || name.contains("partisan"))
+			|| name.contains("trident"))
 		{
 			return STAFF;
 		}
@@ -61,12 +48,12 @@ enum WeaponClass
 			return THROWN;
 		}
 		if (name.contains("dagger") || name.contains("rapier") || name.contains("spear")
-			|| name.contains("hasta"))
+			|| name.contains("hasta") || name.contains("partisan"))
 		{
 			return MELEE_STAB;
 		}
-		if (name.contains("maul") || name.contains("warhammer") || name.contains("hammer")
-			|| name.contains("mace") || name.contains("club") || name.contains("bludgeon"))
+		if (name.contains("maul") || name.contains("hammer") || name.contains("mace")
+			|| name.contains("club") || name.contains("bludgeon"))
 		{
 			return MELEE_CRUSH;
 		}
@@ -77,8 +64,7 @@ enum WeaponClass
 			return MELEE_SLASH;
 		}
 
-		// Something worn in the weapon slot that is none of the above: a cape, a bucket, a
-		// skilling tool. Punching is a better guess than nothing at all.
+		// A cape, a bucket, a skilling tool. Punching beats nothing.
 		return UNARMED;
 	}
 }

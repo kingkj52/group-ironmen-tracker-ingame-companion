@@ -1,49 +1,31 @@
 package com.groupironmencompanion.scene;
 
+import com.groupironmencompanion.activity.Activity;
+import com.groupironmencompanion.data.GroupSkill;
+import javax.annotation.Nullable;
 import net.runelite.api.gameval.AnimationID;
 
 /**
- * Picks an animation from what a member's reported state implies they are doing.
+ * Picks a ghost's animations.
  * <p>
- * No animation id is sent over the wire, and there is nowhere to put one: the server rejects
- * an update carrying a field it does not know about, so the format cannot be extended from
- * this side. Everything here is therefore inferred from data the group already publishes —
- * position, worn equipment, the NPC being fought, and experience gained since the last poll.
- * <p>
- * The inference is a pure function of that state so it can be tested on its own, and so the
- * renderer has no business deciding what a member is doing.
- * <p>
- * What this cannot do is time a short action. Updates arrive about once a second while attack
- * animations fire every few ticks, so a sustained activity looks right and a brief one does
- * not. Planting a seed is the clearest example, and the honest result is a ghost that loops a
- * gathering motion near the patch rather than one that plants in step with its owner.
+ * What a member is doing comes from their {@link Activity}, the same guess the status overlay
+ * and side panel show, so the figure and the text always agree. How they're moving comes from
+ * their position between updates. No client calls in here, so it's all testable.
  */
 final class GhostAnimations
 {
-	/**
-	 * Game ticks between repeats of an action animation.
-	 * <p>
-	 * An action is a single swing, cast or swipe, not a continuous motion, so it plays once
-	 * and the figure returns to its pose until the next one. Looping it instead produces a
-	 * member who never stops mid-swing, which is the one thing nobody in the game ever looks
-	 * like.
-	 * <p>
-	 * Four ticks is the common weapon speed and close enough for most gathering actions too.
-	 * The true interval varies per weapon and is in the cache, but deriving it would be effort
-	 * spent on precision the feed cannot support: positions and targets arrive about once a
-	 * second, so a ghost's swings were never going to land in step with its owner's. The point
-	 * is a figure that reads as fighting, not a reconstruction of the fight.
-	 */
+	/** Ticks between swings, chops and so on. Four is the usual weapon speed. */
 	static final int ACTION_INTERVAL_TICKS = 4;
 
-	/** What a member appears to be doing, in the order the renderer resolves it. */
-	enum Activity
+	// Walking is a tile a tick and running is two. Sits above sqrt(2) so a diagonal step
+	// measured as a straight line still counts as walking.
+	private static final double RUN_THRESHOLD_TILES_PER_TICK = 1.7;
+
+	enum Movement
 	{
-		IDLE,
+		STILL,
 		WALKING,
-		RUNNING,
-		FIGHTING,
-		GATHERING
+		RUNNING
 	}
 
 	private GhostAnimations()
@@ -51,59 +33,77 @@ final class GhostAnimations
 	}
 
 	/**
-	 * The animation to play for a member, or -1 to leave them in their pose animation.
-	 * <p>
-	 * Movement wins over everything: a member who is fighting while moving is kiting, and
-	 * showing the walk reads better than a swing that never lands. Fighting wins over
-	 * gathering because {@code interacting} is a direct observation where a skill's experience
-	 * delta is a guess.
+	 * How fast someone covered a distance.
+	 *
+	 * @param tiles        distance between two reported positions
+	 * @param elapsedTicks ticks between them, at least one
 	 */
-	static int actionFor(Activity activity, WeaponClass weapon)
+	static Movement movementFor(double tiles, int elapsedTicks)
 	{
-		switch (activity)
+		if (tiles <= 0 || elapsedTicks <= 0)
 		{
-			case FIGHTING:
-				return attackFor(weapon);
-			case GATHERING:
-				// A single generic gathering motion, rather than a per-skill guess. The skill
-				// is known, but the animation for it depends on the tool, and a wrong tool
-				// animation looks worse than a neutral one.
-				return AnimationID.HUMAN_PICKUPFLOOR;
-			case IDLE:
-			case WALKING:
-			case RUNNING:
-			default:
-				// Locomotion and standing still are pose animations, not actions.
-				return -1;
+			return Movement.STILL;
 		}
+		return tiles / elapsedTicks > RUN_THRESHOLD_TILES_PER_TICK ? Movement.RUNNING : Movement.WALKING;
 	}
 
-	/** The pose animation underlying whatever action is playing. */
-	static int poseFor(Activity activity)
+	static int poseFor(Movement movement)
 	{
-		switch (activity)
+		switch (movement)
 		{
 			case RUNNING:
 				return AnimationID.HUMAN_RUNNING;
 			case WALKING:
 				return AnimationID.HUMAN_WALK_F;
-			case IDLE:
-			case FIGHTING:
-			case GATHERING:
+			case STILL:
 			default:
 				return AnimationID.HUMAN_READY;
 		}
 	}
 
 	/**
-	 * A representative attack animation per weapon category.
-	 * <p>
-	 * These are the plain human stances, not the weapon's own: a dragon scimitar's real
-	 * animation lives in its stance table in the cache, which the plugin API does not expose.
-	 * The result is recognisably the right kind of attack without being the exact one.
+	 * The action to repeat, or -1 for none. Nobody swings or chops while moving, so a moving
+	 * member gets no action, though they're still fighting as far as {@link #isFighting} goes.
 	 */
-	private static int attackFor(WeaponClass weapon)
+	static int actionFor(@Nullable Activity activity, WeaponClass weapon, boolean moving)
 	{
+		if (activity == null || moving)
+		{
+			return -1;
+		}
+		switch (activity.getKind())
+		{
+			case FIGHTING:
+				return attackFor(activity.getSkill(), weapon);
+			case FISHING:
+			case PICKPOCKETING:
+			case SKILLING:
+				return skillingFor(activity.getSkill());
+			default:
+				return -1;
+		}
+	}
+
+	/** Moving doesn't end a fight: someone kiting or running from an NPC is still fighting it. */
+	static boolean isFighting(@Nullable Activity activity)
+	{
+		return activity != null && activity.getKind() == Activity.Kind.FIGHTING;
+	}
+
+	// The plain human attack animations, not each weapon's own (those are in a stance table
+	// the API doesn't expose). Close enough to read as the right kind of attack.
+	private static int attackFor(@Nullable GroupSkill skill, WeaponClass weapon)
+	{
+		// XP says more than a weapon name we may not recognise.
+		if (skill == GroupSkill.MAGIC)
+		{
+			return AnimationID.HUMAN_CASTING;
+		}
+		if (skill == GroupSkill.RANGED && weapon != WeaponClass.CROSSBOW && weapon != WeaponClass.THROWN)
+		{
+			return AnimationID.HUMAN_BOW;
+		}
+
 		switch (weapon)
 		{
 			case BOW:
@@ -126,43 +126,49 @@ final class GhostAnimations
 		}
 	}
 
-	/**
-	 * Classifies movement from the distance covered between two reports.
-	 * <p>
-	 * Walk and run are not distinguished per tick, because a poll covers between one and two
-	 * ticks and the reported positions are endpoints rather than a path. Measuring over the
-	 * whole gap instead is self-correcting: whatever speed the ghost has to move at to arrive
-	 * on time is the speed its animation should show.
-	 *
-	 * @param tiles        distance between the previous and current reported positions, in
-	 *                     tiles, under either the game's own metric where a diagonal step
-	 *                     counts as one or a straight-line measure where it counts as
-	 *                     {@code sqrt(2)}; the threshold is chosen to separate walking from
-	 *                     running under both
-	 * @param elapsedTicks game ticks the move is being spread across, at least one
-	 */
-	static Activity movementFor(double tiles, int elapsedTicks)
+	// One representative animation per skill. Agility and Sailing have none: the movement
+	// already says it.
+	private static int skillingFor(@Nullable GroupSkill skill)
 	{
-		if (tiles <= 0 || elapsedTicks <= 0)
+		if (skill == null)
 		{
-			return Activity.IDLE;
+			return -1;
 		}
-		double tilesPerTick = tiles / elapsedTicks;
-		if (tilesPerTick > RUN_THRESHOLD_TILES_PER_TICK)
+		switch (skill)
 		{
-			return Activity.RUNNING;
+			case WOODCUTTING:
+				return AnimationID.HUMAN_WOODCUTTING_RUNE_AXE;
+			case MINING:
+				return AnimationID.HUMAN_MINING_RUNE_PICKAXE;
+			case FISHING:
+				return AnimationID.HUMAN_FISH_ONSPOT;
+			case FARMING:
+				return AnimationID.PICKING_LOW;
+			case COOKING:
+				return AnimationID.HUMAN_COOKING;
+			case FIREMAKING:
+				return AnimationID.HUMAN_CREATEFIRE;
+			case SMITHING:
+				return AnimationID.HUMAN_SMITHING;
+			case HERBLORE:
+				return AnimationID.HUMAN_HERBING_VIAL;
+			case FLETCHING:
+				return AnimationID.HUMAN_FLETCHING;
+			case CRAFTING:
+				return AnimationID.HUMAN_LEATHER_CRAFTING;
+			case THIEVING:
+				return AnimationID.HUMAN_PICKPOCKET;
+			case RUNECRAFT:
+				return AnimationID.HUMAN_RUNECRAFT;
+			case MAGIC:
+				return AnimationID.HUMAN_CASTING;
+			case CONSTRUCTION:
+				return AnimationID.HUMAN_POH_BUILD;
+			case PRAYER:
+			case HUNTER:
+				return AnimationID.HUMAN_PICKUPFLOOR;
+			default:
+				return -1;
 		}
-		return Activity.WALKING;
 	}
-
-	/**
-	 * Walking is one tile per tick and running is two, so the threshold belongs between them.
-	 * <p>
-	 * It sits above {@code sqrt(2)} rather than just above 1.0 so that a diagonal step is
-	 * still a walk however the caller measured it: a diagonal covers one tile of movement but
-	 * 1.41 of straight-line distance, and reading that as a run makes every member who walks
-	 * around a corner break into a sprint for a tick. Running diagonally measures 2.83, so
-	 * there is plenty of room on the other side.
-	 */
-	private static final double RUN_THRESHOLD_TILES_PER_TICK = 1.7;
 }

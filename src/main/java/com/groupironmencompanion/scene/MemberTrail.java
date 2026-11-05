@@ -1,37 +1,24 @@
 package com.groupironmencompanion.scene;
 
-import com.groupironmencompanion.scene.GhostAnimations.Activity;
+import com.groupironmencompanion.scene.GhostAnimations.Movement;
 import net.runelite.api.coords.WorldPoint;
 
 /**
- * One member's recent history, enough to tell movement and training apart.
+ * Tracks how fast a member is moving.
  * <p>
- * The subtlety this exists to handle is that positions arrive more slowly than they are
- * consumed. A poll lands about once a second and this is asked once a game tick, so on most
- * ticks a member's reported position is simply the same one as last time. Treating that as
- * "standing still" makes a running member flicker between running and standing every other
- * tick, which is the wrong answer for a reason that has nothing to do with what they are
- * actually doing.
- * <p>
- * So speed is measured between the ticks where the position genuinely changed, and the
- * resulting classification is held rather than recomputed. Whether the figure is still moving
- * is then the renderer's question, not this one: it knows how far its ghost has left to ease.
+ * Positions arrive less often than this is asked, so most ticks bring the same position as
+ * last time. Calling that "stopped" made a running member flicker between running and
+ * standing, so speed is only measured when the position actually changes, and held until it
+ * does again. Whether the figure is still moving is up to the {@link Ghost}, which knows how
+ * far it has left to go.
  */
 class MemberTrail
 {
 	private WorldPoint lastPosition;
 	private int lastChangeTick = -1;
-	private long lastTotalXp = -1;
+	private Movement movement = Movement.STILL;
 
-	/** The last classification made from a real position change. */
-	private Activity movement = Activity.IDLE;
-
-	/**
-	 * Records a reported position, reclassifying speed only when it actually changed.
-	 *
-	 * @param position the member's newest reported position
-	 * @param tick     a monotonically increasing game tick counter
-	 */
+	/** @param tick a game tick counter that only ever goes up */
 	void observe(WorldPoint position, int tick)
 	{
 		if (lastPosition == null)
@@ -40,18 +27,15 @@ class MemberTrail
 			lastChangeTick = tick;
 			return;
 		}
-
 		if (lastPosition.equals(position))
 		{
-			// No new data, or genuinely not moving. Either way there is nothing to measure,
-			// and the previous classification stands.
 			return;
 		}
 
 		if (lastPosition.getPlane() != position.getPlane())
 		{
-			// A plane change is a staircase or a teleport, not a walk.
-			movement = Activity.IDLE;
+			// Stairs or a teleport, not a walk.
+			movement = Movement.STILL;
 		}
 		else
 		{
@@ -63,23 +47,9 @@ class MemberTrail
 		lastChangeTick = tick;
 	}
 
-	/**
-	 * How the member was last seen moving. Only meaningful while their figure still has
-	 * ground to cover; once it arrives the renderer stops asking.
-	 */
-	Activity getMovement()
+	/** How they were last seen moving. Only asked while the figure is moving, so never STILL. */
+	Movement getMovement()
 	{
-		return movement == Activity.IDLE ? Activity.WALKING : movement;
-	}
-
-	/**
-	 * Whether total experience rose since the last call, which stands in for "doing something
-	 * that trains a skill" when a member is stationary and not fighting.
-	 */
-	boolean gainedXp(long totalXp)
-	{
-		boolean gained = lastTotalXp >= 0 && totalXp > lastTotalXp;
-		lastTotalXp = totalXp;
-		return gained;
+		return movement == Movement.STILL ? Movement.WALKING : movement;
 	}
 }

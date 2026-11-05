@@ -107,11 +107,10 @@ impossible to click or target, and unknown to the server. A member on *your* wor
 the game to draw, so you never see a ghost standing inside a real player. Hovering one names
 it in a small panel beside the cursor, which is a label, not a menu.
 
-What they appear to be doing is inferred, because no animation is published: movement from
-position, attacks from the weapon equipped and the NPC being fought, and skilling from
-experience gained. Updates arrive about once a second, so a figure lags its owner slightly and
-brief actions are approximate. Sustained work reads correctly; a single seed going into a patch
-does not.
+A figure acts out the same guess the status overlay shows (see below), so the two always
+agree: fighting, chopping, mining, fishing, farming and so on. Someone who moves mid-fight
+keeps their opponent beside them. Updates come about once a second, so figures lag a little
+and short actions are approximate.
 
 **Never drawn in the Wilderness or on any PvP world, and that cannot be switched off.** A
 figure that cannot be clicked is harmless beside a farming patch and dangerous somewhere that

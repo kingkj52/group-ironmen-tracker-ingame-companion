@@ -15,6 +15,7 @@ import org.junit.Test;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
 
 /**
  * One case per inference rule, driven through {@link GroupState#applyUpdate} exactly as the
@@ -353,6 +354,68 @@ public class ActivityRulesTest
 		baseline();
 		after(3, withSkills(gained(skills(SKILLS), GroupSkill.MAGIC, 65)));
 		assertEquals("Magic at Catherby", text());
+		assertEquals(Activity.Kind.SKILLING, activity().getKind());
+		assertEquals(GroupSkill.MAGIC, activity().getSkill());
+	}
+
+	// The ghost reads these fields rather than the text, so they need to agree with it.
+
+	@Test
+	public void combatExperienceWithoutATargetIsAFightWithNoOpponent()
+	{
+		baseline();
+		after(3, withSkills(gained(gained(skills(SKILLS), GroupSkill.HITPOINTS, 20), GroupSkill.RANGED, 60)));
+		assertEquals("Fighting at Catherby", text());
+		assertEquals(Activity.Kind.FIGHTING, activity().getKind());
+		assertEquals(GroupSkill.RANGED, activity().getSkill());
+		assertNull(activity().getTarget());
+	}
+
+	@Test
+	public void aFightKnowsItsTargetAndWhichCombatSkill()
+	{
+		baseline();
+		MemberDto dto = interacting("Goblin", 13, 30);
+		dto.skills = gained(gained(skills(SKILLS), GroupSkill.HITPOINTS, 15), GroupSkill.MAGIC, 40);
+		after(3, dto);
+		assertEquals("Fighting Goblin (43%)", text());
+		assertEquals("Goblin", activity().getTarget());
+		assertEquals(GroupSkill.MAGIC, activity().getSkill());
+	}
+
+	@Test
+	public void walkingWhileUnderAttackIsStillAFight()
+	{
+		baseline();
+		MemberDto first = interacting("Goblin", 20, 30);
+		first.coordinates = new int[]{2813, 3440, 0, 0};
+		after(3, first);
+
+		// Running off with the goblin still on them.
+		MemberDto moved = interacting("Goblin", 18, 30);
+		moved.coordinates = new int[]{2819, 3446, 0, 0};
+		after(3, moved);
+
+		assertEquals(Activity.Kind.FIGHTING, activity().getKind());
+		assertEquals("Goblin", activity().getTarget());
+	}
+
+	@Test
+	public void talkingHasATargetButIsNotAFight()
+	{
+		baseline();
+		after(3, interacting("Banker", -1, -1));
+		assertEquals(Activity.Kind.TALKING, activity().getKind());
+		assertEquals("Banker", activity().getTarget());
+	}
+
+	@Test
+	public void plainSkillingHasNoTarget()
+	{
+		baseline();
+		after(3, withSkills(gained(skills(SKILLS), GroupSkill.WOODCUTTING, 25)));
+		assertEquals(GroupSkill.WOODCUTTING, activity().getSkill());
+		assertNull(activity().getTarget());
 	}
 
 	@Test

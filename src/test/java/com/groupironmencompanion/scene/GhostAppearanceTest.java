@@ -6,24 +6,17 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
-/**
- * The rules that turn a list of equipped items into a figure.
- * <p>
- * These run against the real bundled table rather than a stub, so they also assert that the
- * generated resource is present, readable, and still describes the items it is expected to.
- * If a regeneration after a game update broke something, this is what says so.
- */
+/** Runs against the real bundled table, so it also catches a bad regeneration. */
 public class GhostAppearanceTest
 {
-	// Items whose worn models are quoted in the design notes, chosen because the pair of
-	// bodies is the whole reason the sleeve rule works.
+	// A platebody has sleeves and a chainbody doesn't, which is what the sleeve rule hangs on.
 	private static final int RUNE_PLATEBODY = 1127;
 	private static final int RUNE_CHAINBODY = 1113;
 	private static final int RUNE_FULL_HELM = 1163;
 	private static final int RUNE_PLATELEGS = 1079;
 	private static final int ABYSSAL_WHIP = 4151;
 
-	// Equipment slot indices, as the group publishes them.
+	// Equipment slot indices.
 	private static final int SLOT_HEAD = 0;
 	private static final int SLOT_WEAPON = 3;
 	private static final int SLOT_BODY = 4;
@@ -57,16 +50,8 @@ public class GhostAppearanceTest
 	}
 
 	/**
-	 * Catches a table built from the wrong cache.
-	 * <p>
-	 * This has already happened once: the Jagex launcher leaves a copy at
-	 * {@code ~/jagexcache} that goes stale the moment you stop launching the game that way,
-	 * and a five year old one produced a table that looked entirely healthy. It had thousands
-	 * of items and every model id resolved, but the ids were for meshes the current client no
-	 * longer has, so members rendered as a floating head.
-	 * <p>
-	 * Nothing about a stale table looks wrong from the inside, so the check has to be for
-	 * something that only exists in a recent cache.
+	 * A table built from an old cache looks fine but draws members as floating heads (it's
+	 * happened). The only way to tell is to check for something only a recent cache has.
 	 */
 	@Test
 	public void theTableWasBuiltFromARecentCache()
@@ -93,15 +78,12 @@ public class GhostAppearanceTest
 		assertEquals(gear.bodyModel(5), slots[GhostAppearance.LEGS]);
 		assertEquals(gear.bodyModel(0), slots[GhostAppearance.HAIR]);
 
-		// Nothing is worn, so the slots that only ever hold equipment stay empty.
 		assertEquals(-1, slots[GhostAppearance.WEAPON]);
 		assertEquals(-1, slots[GhostAppearance.CAPE]);
 		assertEquals(-1, slots[GhostAppearance.SHIELD]);
 	}
 
-	// ------------------------------------------------------------------
-	// Sleeves: the case the whole design rests on
-	// ------------------------------------------------------------------
+	// Sleeves
 
 	@Test
 	public void aPlatebodyBringsItsOwnSleeves()
@@ -131,9 +113,7 @@ public class GhostAppearanceTest
 		assertEquals("arms fall back to the body", gear.bodyModel(3), slots[GhostAppearance.ARMS]);
 	}
 
-	// ------------------------------------------------------------------
 	// Headgear
-	// ------------------------------------------------------------------
 
 	@Test
 	public void headgearHidesHairAndBeard()
@@ -149,9 +129,7 @@ public class GhostAppearanceTest
 		assertEquals("so is the beard", -1, slots[GhostAppearance.JAW]);
 	}
 
-	// ------------------------------------------------------------------
 	// Slots that cover nothing
-	// ------------------------------------------------------------------
 
 	@Test
 	public void legwearReplacesLegsAndNothingElse()
@@ -177,8 +155,6 @@ public class GhostAppearanceTest
 	@Test
 	public void ringsAndAmmunitionAreNeverDrawn()
 	{
-		// They are worn but have no place on the figure, and a ring's model would otherwise
-		// land in whichever slot the mapping happened to point at.
 		GearTable gear = table();
 		int[] bare = GhostAppearance.resolve(new int[14], gear);
 		int[] ringed = GhostAppearance.resolve(wearing(SLOT_RING, 1635), gear);
@@ -186,14 +162,12 @@ public class GhostAppearanceTest
 		org.junit.Assert.assertArrayEquals(bare, ringed);
 	}
 
-	// ------------------------------------------------------------------
 	// Robustness
-	// ------------------------------------------------------------------
 
 	@Test
 	public void anItemTheTableDoesNotKnowLeavesTheBodyShowing()
 	{
-		// What happens to gear added to the game after the table was generated.
+		// Gear newer than the table.
 		GearTable gear = table();
 		int[] slots = GhostAppearance.resolve(wearing(SLOT_BODY, 99_999_999), gear);
 
@@ -203,8 +177,7 @@ public class GhostAppearanceTest
 	@Test
 	public void aShortOrAbsentEquipmentArrayIsHandled()
 	{
-		// A member who has never reported equipment, and one whose container is shorter than
-		// the full set of slots.
+		// No equipment reported yet, or a short container.
 		GearTable gear = table();
 
 		assertEquals(GhostAppearance.SLOT_COUNT,

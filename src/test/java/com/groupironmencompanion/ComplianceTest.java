@@ -93,17 +93,9 @@ public class ComplianceTest
 	}
 
 	/**
-	 * The one permitted menu write stays a filter, and stays gated.
-	 * <p>
-	 * {@link #addsNoMenuEntries()} bans creating, configuring and invoking entries, which
-	 * leaves {@code setMenuEntries} as the only way this plugin can touch the menu at all. That
-	 * is deliberate: it cannot add anything, because the array it passes can only hold entries
-	 * the game itself built, and building one needs the banned {@code createMenuEntry}.
-	 * <p>
-	 * What the ban list cannot express is that the call must happen only while the cursor is
-	 * over the plugin's own window. Blanking the menu anywhere else would take the game away
-	 * from the player, which is a far worse failure than the one the filter exists to fix. So
-	 * this pins the call to a single site, and pins that site to the test that gates it.
+	 * setMenuEntries is the only menu write allowed, and it can only remove entries since
+	 * creating one is banned above. It must only happen over our own window though, or it
+	 * would blank the game's menu everywhere. So there's exactly one call and it's gated.
 	 */
 	@Test
 	public void theOnlyMenuWriteIsGatedOnTheWindow() throws IOException
@@ -165,22 +157,12 @@ public class ComplianceTest
 	@Test
 	public void drawsNothingOnTheMinimap() throws IOException
 	{
-		// The minimap stays untouched without exception. Projecting group positions onto it
-		// would turn the plugin into a radar, which is the shape of tool the PvP and
-		// combat-assistance guidelines are aimed at.
+		// Member positions on the minimap would make this a radar.
 		assertAbsent("Group member data must never be drawn on the minimap.",
 			"localToMinimap", "getMinimapLocation", "worldToMinimap");
 	}
 
-	/**
-	 * Scene drawing is confined to one package.
-	 * <p>
-	 * The optional scene presence feature draws translucent figures where members are standing,
-	 * which needs scene coordinates and projection. That is a real expansion of what the plugin
-	 * touches, so rather than drop the guarantee it is narrowed: everything able to draw in the
-	 * scene lives under {@code scene/}, and a reviewer auditing that claim has one directory to
-	 * read. Nothing elsewhere may acquire the capability by accident.
-	 */
+	/** Only scene presence draws in the scene, and it all lives in scene/, so there's one place to audit. */
 	@Test
 	public void sceneDrawingIsConfinedToTheScenePackage() throws IOException
 	{
@@ -223,15 +205,7 @@ public class ComplianceTest
 		}
 	}
 
-	/**
-	 * The PvP cutout must stay hardwired.
-	 * <p>
-	 * A figure that cannot be clicked is harmless in a farming patch and dangerous in the
-	 * Wilderness, where reacting correctly to shapes on screen is the entire activity. The gate
-	 * therefore refuses to draw on any world where players can attack each other, and inside
-	 * the Wilderness on any world, with no setting to override it. This test exists so nobody
-	 * can add one later without deliberately deleting the test that forbids it.
-	 */
+	/** The Wilderness and PvP cutout has no setting to turn it off, and this keeps it that way. */
 	@Test
 	public void scenePresenceIsHardwiredOffInPvp() throws IOException
 	{

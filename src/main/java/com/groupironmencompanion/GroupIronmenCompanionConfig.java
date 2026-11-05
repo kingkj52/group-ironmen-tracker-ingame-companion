@@ -66,12 +66,9 @@ public interface GroupIronmenCompanionConfig extends Config
 
 	@ConfigSection(
 		name = "Scene presence",
-		description = "EXPERIMENTAL, and off by default. Draws group members who are standing near "
-			+ "you but are on another world as translucent blue figures, so that working the same "
-			+ "area apart still looks like working it together. The figures are drawn by this "
-			+ "plugin only: they are not game entities, cannot be clicked or targeted, and the "
-			+ "server is never told they exist. They are never drawn in the Wilderness or on any "
-			+ "PvP world, and that cannot be turned off.",
+		description = "Off by default. Shows group members near you who are on another world as "
+			+ "translucent figures. They can't be clicked, the server never knows about them, and "
+			+ "they never appear in the Wilderness or on PvP worlds.",
 		position = 6,
 		closedByDefault = true
 	)
@@ -521,10 +518,9 @@ public interface GroupIronmenCompanionConfig extends Config
 	@ConfigItem(
 		keyName = "scenePresence",
 		name = "Draw members on other worlds",
-		description = "Draw group members who are standing close enough to be on screen, but are on "
-			+ "another world, as translucent blue figures. A member on your own world is left to the "
-			+ "game to draw. They are this plugin's own drawing, not game entities: nothing can "
-			+ "click or target them. Never drawn in the Wilderness or on a PvP world.",
+		description = "Show group members near you who are on another world as translucent blue "
+			+ "figures. Members on your world are left to the game. Never in the Wilderness or on "
+			+ "PvP worlds.",
 		position = 0,
 		section = sceneSection
 	)
@@ -536,8 +532,8 @@ public interface GroupIronmenCompanionConfig extends Config
 	@ConfigItem(
 		keyName = "scenePresenceOpponents",
 		name = "Also draw what they are fighting",
-		description = "Draw a translucent copy of the NPC a member is fighting next to them, when "
-			+ "the same kind of NPC is present in your own scene to copy the shape of.",
+		description = "Draw the NPC they're fighting too. Only works when the same kind of NPC is "
+			+ "nearby on your world, since its look is copied from there.",
 		position = 1,
 		section = sceneSection
 	)
@@ -549,8 +545,8 @@ public interface GroupIronmenCompanionConfig extends Config
 	@ConfigItem(
 		keyName = "scenePresenceLabels",
 		name = "Name the figure under the cursor",
-		description = "Show the member's name, and what they are fighting, in a small panel beside "
-			+ "the cursor. It is a label, not a menu, and cannot be clicked.",
+		description = "Show the member's name and what they're doing beside the cursor. It's a "
+			+ "label, not a menu, and can't be clicked.",
 		position = 2,
 		section = sceneSection
 	)

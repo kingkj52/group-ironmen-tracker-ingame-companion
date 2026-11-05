@@ -12,34 +12,20 @@ import net.runelite.api.WorldView;
 import net.runelite.api.gameval.VarbitID;
 
 /**
- * The single place that decides whether group ghosts may be drawn at all.
+ * Decides whether ghosts can be drawn at all.
  * <p>
- * Everything the scene renderer does goes through {@link #allowed()}. Keeping the decision in
- * one object means the restrictions below cannot be forgotten by a new caller, and means a
- * reviewer has one short file to read rather than a condition repeated across the renderer.
+ * Never in the Wilderness or on a PvP world, and there's deliberately no setting for that. A
+ * figure you can't click is fine next to a farming patch, but in the Wilderness it looks like
+ * a player and can stand between you and a real one. Don't add a setting for it.
  * <p>
- * <b>The PvP cutout is deliberately not configurable.</b> A translucent figure that cannot be
- * clicked is harmless while two people farm next to each other on separate worlds, and
- * actively dangerous in the Wilderness: it reads as a player, it can sit between you and a
- * real one, and the whole point of being there is reacting correctly to figures on your
- * screen. There is no setting to turn this cutout off, and there must never be one, so the
- * worst case for a careless user is the feature silently stopping rather than misleading them
- * somewhere it matters.
- * <p>
- * Instances are excluded for a duller reason: inside one, world coordinates are remapped, so
- * a member's reported position would place their ghost somewhere unrelated.
+ * Not in instances either, since coordinates there are remapped and a member's position
+ * would land somewhere unrelated.
  */
 @Singleton
 public class ScenePresenceGate
 {
-	/**
-	 * World types where no ghost is ever drawn.
-	 * <p>
-	 * PvP, Bounty Hunter, High Risk, Deadman and Last Man Standing are all worlds where other
-	 * players can attack you anywhere. PvP Arena, Tournament and Beta worlds are excluded as
-	 * well: they are combat contexts, and the group's reported coordinates come from whatever
-	 * world each member is actually on, so a ghost there would be meaningless anyway.
-	 */
+	// Worlds where players can attack you anywhere, plus other combat worlds where a ghost
+	// would mean nothing.
 	private static final Set<WorldType> FORBIDDEN_WORLDS = EnumSet.of(
 		WorldType.PVP,
 		WorldType.BOUNTY,
@@ -56,58 +42,32 @@ public class ScenePresenceGate
 	@Inject
 	private GroupIronmenCompanionConfig config;
 
-	/**
-	 * Whether ghosts may be drawn right now. Client thread only.
-	 * <p>
-	 * Checked every tick rather than cached, because every input to it can change between one
-	 * tick and the next: hopping worlds, stepping over the Wilderness ditch, or entering an
-	 * instance.
-	 */
+	/** Checked every tick, never cached: hopping or crossing the ditch changes the answer. */
 	public boolean allowed()
 	{
-		if (!config.scenePresence())
+		if (!config.scenePresence()
+			|| client.getGameState() != GameState.LOGGED_IN
+			|| isForbiddenWorld(client.getWorldType())
+			|| client.getVarbitValue(VarbitID.INSIDE_WILDERNESS) != 0)
 		{
 			return false;
 		}
-		if (client.getGameState() != GameState.LOGGED_IN)
-		{
-			return false;
-		}
-		if (isForbiddenWorld(client.getWorldType()))
-		{
-			return false;
-		}
-		if (inWilderness())
-		{
-			return false;
-		}
-
 		WorldView view = client.getTopLevelWorldView();
 		return view != null && !view.isInstance();
 	}
 
-	/**
-	 * True on any world where ghosts are suppressed. Separated out as a pure function of the
-	 * world types so the rule can be tested without a running client.
-	 */
 	static boolean isForbiddenWorld(Set<WorldType> types)
 	{
 		if (types == null)
 		{
-			// The client has not told us what kind of world this is yet. Draw nothing rather
-			// than assume the safe case.
+			// Not told yet. Draw nothing until we are.
 			return true;
 		}
-
-		// Defer to RuneLite's own idea of a PvP world first, so a world type added upstream
-		// after this was written is covered without anyone remembering to come back here. The
-		// explicit list below is the belt to that pair of braces, and covers worlds that are
-		// combat contexts without being PvP in RuneLite's sense.
+		// RuneLite's own check first, so a PvP world type added later is covered too.
 		if (WorldType.isPvpWorld(types))
 		{
 			return true;
 		}
-
 		for (WorldType type : types)
 		{
 			if (FORBIDDEN_WORLDS.contains(type))
@@ -116,16 +76,5 @@ public class ScenePresenceGate
 			}
 		}
 		return false;
-	}
-
-	/**
-	 * Reads the game's own Wilderness flag rather than testing coordinates against a bounding
-	 * box. The varbit is what the client uses to decide whether to show the Wilderness level
-	 * on screen, so it already accounts for the awkward edges: the Wilderness Agility course,
-	 * the underground sections, and the areas that look like Wilderness on the map but are not.
-	 */
-	private boolean inWilderness()
-	{
-		return client.getVarbitValue(VarbitID.INSIDE_WILDERNESS) != 0;
 	}
 }

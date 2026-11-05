@@ -1,10 +1,12 @@
 package com.groupironmencompanion.ui;
 
 import com.groupironmencompanion.GroupIronmenCompanionConfig;
+import com.groupironmencompanion.activity.ActivityTracker;
 import com.groupironmencompanion.data.GroupMember;
 import com.groupironmencompanion.data.GroupState;
 import java.awt.BorderLayout;
 import java.awt.GridLayout;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -14,6 +16,7 @@ import javax.swing.BoxLayout;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.SwingUtilities;
+import javax.swing.Timer;
 import net.runelite.client.callback.ClientThread;
 import net.runelite.client.game.ItemManager;
 import net.runelite.client.ui.ColorScheme;
@@ -31,8 +34,15 @@ import net.runelite.client.ui.components.materialtabs.MaterialTabGroup;
  */
 public class GroupPanel extends PluginPanel
 {
+	/**
+	 * How often the Group tab redraws while the sidebar shows it, so "last seen", idle times
+	 * and short-lived activities keep moving when no member has uploaded anything new.
+	 */
+	private static final int TICK_MILLIS = 5000;
+
 	private final GroupState groupState;
 	private final GroupIronmenCompanionConfig config;
+	private final ActivityTracker activityTracker;
 
 	private final JLabel statusLabel = new JLabel();
 	private final JPanel membersView = new JPanel();
@@ -42,6 +52,8 @@ public class GroupPanel extends PluginPanel
 	private final DiariesView diariesView;
 
 	private final Map<String, MemberCard> cards = new HashMap<>();
+
+	private final Timer ticker = new Timer(TICK_MILLIS, e -> tick());
 
 	/**
 	 * Rebuild for whichever tab is on screen.
@@ -58,11 +70,12 @@ public class GroupPanel extends PluginPanel
 	private final Runnable membersRefresh = this::refreshMembers;
 
 	public GroupPanel(GroupState groupState, GroupIronmenCompanionConfig config,
-		ItemManager itemManager, ClientThread clientThread)
+		ActivityTracker activityTracker, ItemManager itemManager, ClientThread clientThread)
 	{
 		super(true);
 		this.groupState = groupState;
 		this.config = config;
+		this.activityTracker = activityTracker;
 
 		this.itemsView = new ItemSearchView(groupState, itemManager, clientThread);
 		this.skillsView = new SkillsView(groupState);
@@ -117,6 +130,36 @@ public class GroupPanel extends PluginPanel
 		add(display, BorderLayout.CENTER);
 	}
 
+	@Override
+	public void onActivate()
+	{
+		ticker.start();
+		refresh();
+	}
+
+	@Override
+	public void onDeactivate()
+	{
+		ticker.stop();
+	}
+
+	/** Also stops when the panel is taken down, which does not always deactivate it first. */
+	@Override
+	public void removeNotify()
+	{
+		ticker.stop();
+		super.removeNotify();
+	}
+
+	/** Only the Group tab shows anything that ages on its own. */
+	private void tick()
+	{
+		if (activeView == membersRefresh)
+		{
+			membersRefresh.run();
+		}
+	}
+
 	/** Safe to call from any thread. */
 	public void refresh()
 	{
@@ -160,6 +203,7 @@ public class GroupPanel extends PluginPanel
 	private void refreshMembers()
 	{
 		List<GroupMember> members = groupState.getMembers();
+		Instant now = Instant.now();
 
 		// Reuse a card per member so the panel does not flicker on every poll.
 		List<String> present = new ArrayList<>(members.size());
@@ -180,7 +224,9 @@ public class GroupPanel extends PluginPanel
 
 			present.add(member.getName());
 			MemberCard card = cards.computeIfAbsent(member.getName(), name -> new MemberCard());
-			card.update(member, online, config.panelShowActivity(), groupState.isLocalPlayer(member));
+			card.update(member, online,
+				config.panelShowActivity() ? activityTracker.get(member.getName()) : null, now,
+				groupState.isLocalPlayer(member));
 			membersView.add(card);
 			shown++;
 		}

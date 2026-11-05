@@ -1,6 +1,7 @@
 package com.groupironmencompanion;
 
 import com.google.inject.Provides;
+import com.groupironmencompanion.activity.ActivityTracker;
 import com.groupironmencompanion.api.GroupApi;
 import com.groupironmencompanion.api.MemberDto;
 import com.groupironmencompanion.bank.GameSprites;
@@ -180,6 +181,9 @@ public class GroupIronmenCompanionPlugin extends Plugin
 
 	@Inject
 	private GhostLabelOverlay ghostLabelOverlay;
+
+	@Inject
+	private ActivityTracker activityTracker;
 
 	/** Swapped on config changes and read from the polling thread, so it must be volatile. */
 	private volatile GroupPanel panel;
@@ -749,7 +753,7 @@ public class GroupIronmenCompanionPlugin extends Plugin
 			return;
 		}
 
-		panel = new GroupPanel(groupState, config, itemManager, clientThread);
+		panel = new GroupPanel(groupState, config, activityTracker, itemManager, clientThread);
 		navButton = NavigationButton.builder()
 			.tooltip("Group Ironmen Tracker In-Game Companion")
 			.icon(buildIcon())

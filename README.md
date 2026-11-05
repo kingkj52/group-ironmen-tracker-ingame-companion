@@ -68,14 +68,34 @@ hand; see [tools/mapdump](tools/mapdump/README.md).
 
 **Side panel** - five tabs:
 
-- **Group** - each member's hitpoints, prayer, run energy, world and last-seen time.
+- **Group** - each member's hitpoints, prayer, run energy, world, last-seen time and what
+  they seem to be doing (see below).
 - **Items** - search everything the group owns and see who is holding it.
 - **Skills** - total level and experience, or one skill compared across the group.
 - **Quests** - completion per member, plus a search showing where everyone stands on a quest.
 - **Diaries** - achievement diary completion per member, overall or broken down by region
   and tier.
 
-**Status overlay** (off by default) - the same vitals as a compact in-game overlay.
+**Status overlay** (off by default) - the group at a glance in the game's own fonts: each
+member's name and world, hitpoints, prayer and run energy bars, and a line saying what they
+seem to be doing. Offline members get one grey line with when they were last seen. Alt-drag
+to move it, alt-drag its edge to change the width.
+
+**What members are doing** - a guess, shown in the status overlay and side panel, like
+"Fishing at Catherby", "Fighting Goblin (43%)" or "Idle at Lumbridge (3m)".
+
+It can be wrong. The tracker doesn't share an activity, so it's worked out from what
+changes between updates: XP, position, quests, bank and inventory, and what they're
+interacting with. Some limits:
+
+- Woodcutting, mining and similar only show once the XP arrives, since trees and rocks
+  aren't an interaction.
+- A quest only shows as in progress if it started while you were watching.
+- Standing still looks the same as logged out until the offline threshold passes.
+- An unusual instance may show a nearby place name instead of its own.
+
+Places come from region names and the world map's own labels (see Credits), so new areas are
+named without a plugin update.
 
 **Members in the world** - off by default, and the one feature that draws in the game scene.
 Group members standing close enough to be on screen are drawn as translucent blue figures,
@@ -129,11 +149,11 @@ have anything to show.
 | Section | What it controls |
 | --- | --- |
 | Connection | Group name, token, self-hosted server URL, refresh interval, offline threshold |
-| Side panel | Enable, show activity, show offline members, include yourself |
+| Side panel | Enable, show what members are doing, show offline members, include yourself |
 | Group bank | Enable, hotkey, bank tab, open/close with the bank, item values |
 | Skills tab | Enable hover, panel position, include yourself, include offline members |
 | World map | Enable markers, dungeon entrance markers, include offline members, member list, routing |
-| Status overlay | Enable, vitals, activity, offline members, include yourself |
+| Status overlay | Enable, vitals bars, activity, offline members, include yourself, bar numbers, backdrop |
 | Scene presence | Draw members on other worlds, draw what they are fighting, hover labels, transparency |
 | Member colours | One colour per member, assigned alphabetically |
 | Data sharing | Whether to upload your own data when the tracker plugin is absent |
@@ -165,11 +185,12 @@ bar, so this plugin is built to stay clearly inside
   feature, off by default, draws translucent figures in the game scene where nearby members
   are standing; it is confined to its own package, cannot be clicked or targeted, and is
   hardwired off in the Wilderness and on PvP worlds with no setting to override that.
-- **No PvP or combat assistance.** The only combat-adjacent data shown is what a group member
-  is interacting with, in the side panel and the optional status overlay, never as a scene
-  overlay and never for players. It can be switched off. This is your own five-person group,
-  who each opted in by running a tracker plugin; it is not scouting information about anyone
-  else.
+- **No PvP or combat assistance.** The only combat-adjacent data is what a group member is
+  fighting or doing. It shows in the side panel and status overlay, and scene presence can
+  draw it in the world. Scene presence only draws members on *other* worlds, so nothing it
+  shows can be part of your own fight, and it's off in the Wilderness and on PvP worlds.
+  Nothing predicts attacks or prayers, and nothing is shown about anyone outside your group,
+  who each opted in by running a tracker. All of it can be switched off.
 - **No reflection**, no JNI, no external processes, no filesystem access, no runtime code
   loading, and no dependencies beyond what runelite-client already provides.
 
@@ -203,7 +224,8 @@ If you self-host, none of this reaches groupiron.men at all.
   hung server cannot stall the client or another plugin's scheduled work.
 - Responses are parsed into plain data classes and are size-capped. Response bodies are never
   logged, and neither is your token.
-- No files are read or written. The one bundled resource is read from the jar.
+- No files are read or written. The bundled resources (map areas and place names) are read
+  from the jar.
 
 ## Building
 
@@ -237,6 +259,13 @@ member's own body showing through that slot, so a stale table is cosmetically po
 than broken. `GhostAppearanceTest` loads the generated file and asserts that a spread of known
 items still resolve the way the composition rules expect, including one item recent enough to
 catch a table built from the wrong cache.
+
+## Credits
+
+Place names combine the region list from
+[Location Display](https://github.com/trinhc2/Location-Display) by trinhc2 (BSD 2-Clause)
+with the world map's own labels from the game cache. Region ids for the instances the map
+labels name badly come from RuneLite's Discord plugin.
 
 ## Not implemented
 

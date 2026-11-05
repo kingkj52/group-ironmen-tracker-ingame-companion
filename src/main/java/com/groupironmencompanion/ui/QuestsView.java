@@ -118,7 +118,7 @@ class QuestsView extends JPanel
 			BorderFactory.createMatteBorder(0, 0, 1, 0, ColorScheme.DARK_GRAY_COLOR),
 			BorderFactory.createEmptyBorder(5, 6, 5, 6)));
 
-		JLabel name = new JLabel(groupState.isLocalPlayer(member) ? member.getName() + " (you)" : member.getName());
+		JLabel name = ServerText.label(groupState.isLocalPlayer(member) ? member.getName() + " (you)" : member.getName());
 		name.setFont(FontManager.getRunescapeBoldFont());
 		name.setForeground(member.getColour());
 
@@ -218,7 +218,7 @@ class QuestsView extends JPanel
 		{
 			QuestState state = Quests.stateOf(member, quest);
 
-			JLabel who = new JLabel(member.getName());
+			JLabel who = ServerText.label(member.getName());
 			who.setFont(FontManager.getRunescapeSmallFont());
 			who.setForeground(member.getColour());
 

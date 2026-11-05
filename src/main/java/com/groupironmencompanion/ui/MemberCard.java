@@ -27,9 +27,9 @@ class MemberCard extends JPanel
 	private static final Color RUN_COLOUR = new Color(224, 190, 62);
 	private static final Color OFFLINE_COLOUR = new Color(120, 120, 120);
 
-	private final JLabel nameLabel = new JLabel();
-	private final JLabel statusLabel = new JLabel();
-	private final JLabel activityLabel = new JLabel();
+	private final JLabel nameLabel = ServerText.plain(new JLabel());
+	private final JLabel statusLabel = ServerText.plain(new JLabel());
+	private final JLabel activityLabel = ServerText.plain(new JLabel());
 
 	private final ThinProgressBar hitpoints = new ThinProgressBar();
 	private final ThinProgressBar prayer = new ThinProgressBar();

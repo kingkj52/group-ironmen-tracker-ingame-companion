@@ -185,7 +185,7 @@ class ItemSearchView extends JPanel
 		{
 			GroupMember member = groupState.getMember(owner.getKey());
 
-			JLabel who = new JLabel(owner.getKey());
+			JLabel who = ServerText.label(owner.getKey());
 			who.setFont(FontManager.getRunescapeSmallFont());
 			who.setForeground(member != null ? member.getColour() : ColorScheme.LIGHT_GRAY_COLOR);
 

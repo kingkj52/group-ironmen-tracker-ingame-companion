@@ -168,7 +168,7 @@ class DiariesView extends JPanel
 			BorderFactory.createMatteBorder(0, 0, 1, 0, ColorScheme.DARK_GRAY_COLOR),
 			BorderFactory.createEmptyBorder(5, 6, 5, 6)));
 
-		JLabel name = new JLabel(groupState.isLocalPlayer(member) ? member.getName() + " (you)" : member.getName());
+		JLabel name = ServerText.label(groupState.isLocalPlayer(member) ? member.getName() + " (you)" : member.getName());
 		name.setFont(FontManager.getRunescapeBoldFont());
 		name.setForeground(member.getColour());
 

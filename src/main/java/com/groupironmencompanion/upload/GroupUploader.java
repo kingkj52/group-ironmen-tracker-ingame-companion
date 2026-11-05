@@ -91,8 +91,9 @@ public class GroupUploader
 	private boolean questsChanged = true;
 	private long lastQuestScan;
 	private int[] pendingSharedBank;
-	private boolean membershipConfirmed;
-	private String membershipCheckedFor;
+	// Written by reset on the client thread, read by flush on the polling thread.
+	private volatile boolean membershipConfirmed;
+	private volatile String membershipCheckedFor;
 	private volatile long backoffUntil;
 
 	@Getter
@@ -101,6 +102,7 @@ public class GroupUploader
 	@Getter
 	private volatile String status = "Idle";
 
+	/** Client thread only: it clears the group storage snapshot that onGameTick commits. */
 	public void reset()
 	{
 		synchronized (pending)
@@ -360,7 +362,6 @@ public class GroupUploader
 	// Sending, called off the client thread
 	// ------------------------------------------------------------------
 
-	/** Posts everything staged since the last call. Must not run on the client thread. */
 	/**
 	 * Drops what is staged and what was last sent, and nothing else. Safe from the polling
 	 * thread: the rest of {@link #reset} is client thread state, such as a group storage
@@ -377,6 +378,7 @@ public class GroupUploader
 		active = false;
 	}
 
+	/** Posts everything staged since the last call. Must not run on the client thread. */
 	public void flush(String playerName)
 	{
 		if (!shouldUpload())

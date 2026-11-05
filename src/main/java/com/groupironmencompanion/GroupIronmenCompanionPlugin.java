@@ -295,7 +295,7 @@ public class GroupIronmenCompanionPlugin extends Plugin
 		removeSidePanel();
 
 		bankViewer.reset();
-		uploader.reset();
+		clientThread.invoke(uploader::reset);
 		clientThread.invoke(routeTracker::stop);
 		clientThread.invoke(mapMarkers::clear);
 		clientThread.invoke(scenePresence::reset);
@@ -579,14 +579,18 @@ public class GroupIronmenCompanionPlugin extends Plugin
 	}
 
 	/**
-	 * Each bridge ignores messages that aren't its own. The World Map Plus bridge's state is
-	 * client-thread only, and any plugin can post from any thread, so it's handed over there.
+	 * Each bridge ignores messages that aren't its own. Both keep their state on the client
+	 * thread, and any plugin can post from any thread, so they're handled there. When the post
+	 * already came from the client thread, invoke runs it straight away.
 	 */
 	@Subscribe
 	public void onPluginMessage(PluginMessage event)
 	{
-		routeTracker.onPluginMessage(event);
-		clientThread.invoke(() -> worldMapPlus.onPluginMessage(event));
+		clientThread.invoke(() ->
+		{
+			routeTracker.onPluginMessage(event);
+			worldMapPlus.onPluginMessage(event);
+		});
 	}
 
 	@Subscribe
@@ -671,7 +675,7 @@ public class GroupIronmenCompanionPlugin extends Plugin
 				break;
 
 			case "uploadMode":
-				uploader.reset();
+				clientThread.invoke(uploader::reset);
 				break;
 
 			case "mapPanel":
@@ -714,8 +718,8 @@ public class GroupIronmenCompanionPlugin extends Plugin
 	private void resetConnection()
 	{
 		groupState.reset();
-		uploader.reset();
-		// Config changes come in off the client thread, where the bridge lives.
+		// Config changes come in off the client thread, and both of these live on it.
+		clientThread.invoke(uploader::reset);
 		clientThread.invoke(worldMapPlus::reset);
 		lastPollMillis = 0;
 	}

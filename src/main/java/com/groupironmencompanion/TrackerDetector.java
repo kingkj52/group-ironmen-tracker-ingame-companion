@@ -55,13 +55,17 @@ public class TrackerDetector
 		return installed;
 	}
 
-	/** Forces the next query to re-scan, used when plugin state is known to have changed. */
-	public void invalidate()
+	/**
+	 * Forces the next query to re-scan, used when plugin state is known to have changed.
+	 * Synchronized so it can't land mid-scan and be overwritten by that scan's stale result.
+	 */
+	public synchronized void invalidate()
 	{
 		checkedAt = 0;
 	}
 
-	private void refreshIfStale()
+	// Called from both the client and polling threads.
+	private synchronized void refreshIfStale()
 	{
 		long now = System.currentTimeMillis();
 		if (now - checkedAt < CACHE_MILLIS)

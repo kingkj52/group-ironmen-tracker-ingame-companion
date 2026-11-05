@@ -57,6 +57,7 @@ public class GroupApi
 
 	/** Guards against a hostile or broken server returning an unbounded body. */
 	private static final long MAX_RESPONSE_BYTES = 8L * 1024 * 1024;
+	private static final long MAX_ERROR_BYTES = 16 * 1024;
 
 	@Inject
 	private OkHttpClient sharedClient;
@@ -306,8 +307,10 @@ public class GroupApi
 			{
 				// The server answers 401 both for a character outside the group and, before
 				// it gets that far, for a wrong token. Only the first says so in its body.
+				// The error message is short; the cap only stops a hostile server sending gigabytes.
 				ResponseBody body = response.body();
-				String text = body == null ? "" : body.string();
+				String text = body == null ? "" : new String(
+					new BoundedInputStream(body.byteStream(), MAX_ERROR_BYTES).readAllBytes(), StandardCharsets.UTF_8);
 				if (text.contains(NOT_A_MEMBER))
 				{
 					return false;

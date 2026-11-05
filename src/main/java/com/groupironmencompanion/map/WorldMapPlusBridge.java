@@ -241,10 +241,11 @@ public class WorldMapPlusBridge
 			return;
 		}
 
-		List<?> covered = asList(data.get("covered"));
+		// The answer also carries "covered", "mapNames" and "mapKinds". None is read: only an
+		// exact tile lets us stand aside, and we never show their map's name. Parsing them to
+		// store them unread would just be three more things to keep in step with their format.
 		List<?> exact = asList(data.get("exact"));
-		List<?> names = asList(data.get("mapNames"));
-		if (covered == null || exact == null)
+		if (exact == null)
 		{
 			return;
 		}
@@ -252,14 +253,11 @@ public class WorldMapPlusBridge
 		long now = System.currentTimeMillis();
 		for (int i = 0; i < asked.points.size(); i++)
 		{
-			// The lists run parallel to the points we sent, but they come from another plugin,
-			// so every index is checked rather than assumed.
-			boolean isCovered = i < covered.size() && Boolean.TRUE.equals(covered.get(i));
+			// The list runs parallel to the points we sent, but it comes from another plugin,
+			// so every index is checked rather than assumed. A point the answer is too short
+			// to cover stays unknown, which reads as not covered.
 			boolean isExact = i < exact.size() && Boolean.TRUE.equals(exact.get(i));
-			String name = names != null && i < names.size() && names.get(i) instanceof String
-				? (String) names.get(i)
-				: "";
-			known.put(asked.points.get(i), new Coverage(isCovered, isExact, name, now));
+			known.put(asked.points.get(i), new Coverage(isExact, now));
 		}
 	}
 
@@ -291,19 +289,15 @@ public class WorldMapPlusBridge
 		return value instanceof List ? (List<?>) value : null;
 	}
 
-	/** What World Map Plus said about one tile, and when. */
+	/** Whether World Map Plus has imagery of one tile, and when it said so. */
 	private static final class Coverage
 	{
-		private final boolean covered;
 		private final boolean exact;
-		private final String mapName;
 		private final long at;
 
-		Coverage(boolean covered, boolean exact, String mapName, long at)
+		Coverage(boolean exact, long at)
 		{
-			this.covered = covered;
 			this.exact = exact;
-			this.mapName = mapName;
 			this.at = at;
 		}
 

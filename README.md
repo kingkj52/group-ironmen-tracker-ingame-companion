@@ -67,6 +67,26 @@ hand; see [tools/mapdump](tools/mapdump/README.md).
 
 **Status overlay** (off by default) - the same vitals as a compact in-game overlay.
 
+**Members in the world** - off by default, and the one feature that draws in the game scene.
+Group members standing close enough to be on screen are drawn as translucent blue figures,
+wearing the gear they actually have equipped, even though they are on another world. The point
+is farming or skilling the same spot on separate worlds and still seeing company.
+
+They are this plugin's own drawing and nothing more: absent from the player and NPC lists,
+impossible to click or target, and unknown to the server. A member on *your* world is left to
+the game to draw, so you never see a ghost standing inside a real player. Hovering one names
+it in a small panel beside the cursor, which is a label, not a menu.
+
+What they appear to be doing is inferred, because no animation is published: movement from
+position, attacks from the weapon equipped and the NPC being fought, and skilling from
+experience gained. Updates arrive about once a second, so a figure lags its owner slightly and
+brief actions are approximate. Sustained work reads correctly; a single seed going into a patch
+does not.
+
+**Never drawn in the Wilderness or on any PvP world, and that cannot be switched off.** A
+figure that cannot be clicked is harmless beside a farming patch and dangerous somewhere that
+reacting correctly to shapes on screen is the whole activity.
+
 ## Setup
 
 1. One member creates a group at [groupiron.men](https://groupiron.men) and shares the group
@@ -104,6 +124,7 @@ have anything to show.
 | Skills tab | Enable hover, panel position, include yourself, include offline members |
 | World map | Enable markers, dungeon entrance markers, include offline members, member list, routing |
 | Status overlay | Enable, vitals, activity, offline members, include yourself |
+| Scene presence | Draw members on other worlds, draw what they are fighting, hover labels, transparency |
 | Member colours | One colour per member, assigned alphabetically |
 | Data sharing | Whether to upload your own data when the tracker plugin is absent |
 
@@ -169,6 +190,20 @@ asserts that a spread of known dungeons still resolve to the right entrances.
 Where the cache defines no route to the surface - the Abyss, Tutorial Island, a couple of
 Prifddinas interiors - a member still gets their true-position marker and the area's real
 name in the tooltip, just no entrance marker.
+
+## Worn model data
+
+`gear.dat` is generated from the game cache by [tools/geardump](tools/geardump/README.md) and
+holds the worn models for every equippable item, about 4,500 of them in 80 KB. It exists
+because a running client will not say what an item looks like worn: `ItemComposition` offers
+only the flat inventory icon, and a `PlayerComposition` cannot be built for somebody who is not
+on your world.
+
+Regenerate it after a game update to pick up new items. Gear the table predates renders as the
+member's own body showing through that slot, so a stale table is cosmetically poorer rather
+than broken. `GhostAppearanceTest` loads the generated file and asserts that a spread of known
+items still resolve the way the composition rules expect, including one item recent enough to
+catch a table built from the wrong cache.
 
 ## Not implemented
 

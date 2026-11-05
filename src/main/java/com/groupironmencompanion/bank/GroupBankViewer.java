@@ -33,8 +33,8 @@ public class GroupBankViewer
 	public static final String TAB_ALL = "All";
 	public static final String TAB_SHARED = "Group Storage";
 
-	/** Items per row in the grid. */
-	public static final int COLUMNS = 8;
+	/** Items per row in the grid until the window is resized. */
+	public static final int DEFAULT_COLUMNS = 8;
 
 	@Inject
 	private GroupState groupState;
@@ -81,6 +81,13 @@ public class GroupBankViewer
 	@Getter
 	private long visibleProfit;
 
+	/** Items per row, which follows the window's width. */
+	@Getter
+	private volatile int columns = DEFAULT_COLUMNS;
+
+	/** Rows the window has room for. Set by the overlay once it has laid itself out. */
+	private int visibleRows = 1;
+
 	// ------------------------------------------------------------------
 	// Window state
 	// ------------------------------------------------------------------
@@ -125,6 +132,16 @@ public class GroupBankViewer
 	public void setSearchFocused(boolean focused)
 	{
 		this.searchFocused = focused;
+	}
+
+	/** Sets how many items fit across the window, laying the rows out again if it changed. */
+	public void setColumns(int columns)
+	{
+		if (this.columns != columns)
+		{
+			this.columns = columns;
+			markDirty();
+		}
 	}
 
 	public void markDirty()
@@ -199,9 +216,24 @@ public class GroupBankViewer
 		visibleValue = value;
 		visibleProfit = profit;
 
-		// The same limit the wheel and the scrollbar use. Clamping to the last row instead left
-		// a shrunk list scrolled to a nearly empty page with the thumb off the end of its track.
-		int maxScroll = Math.max(0, rows.size() - GroupBankOverlay.VISIBLE_ROWS);
+		clampScroll();
+	}
+
+	/**
+	 * Tells the viewer how many rows fit. Client thread only. The window is resizable, so this
+	 * changes, and making it smaller while scrolled near the bottom has to pull the scroll back.
+	 */
+	public void setVisibleRows(int visibleRows)
+	{
+		this.visibleRows = Math.max(1, visibleRows);
+		clampScroll();
+	}
+
+	// Stop at the last full page, the same limit the wheel and scrollbar use. Stopping at the
+	// last row instead leaves a mostly empty page with the scrollbar thumb off the end.
+	private void clampScroll()
+	{
+		int maxScroll = Math.max(0, rows.size() - visibleRows);
 		if (scrollRow > maxScroll)
 		{
 			scrollRow = maxScroll;
@@ -278,7 +310,7 @@ public class GroupBankViewer
 		Map<String, List<ItemStack>> sections = new LinkedHashMap<>();
 		if (TAB_SHARED.equals(tab))
 		{
-			sections.put("Group storage", member.getBank());
+			sections.put(TAB_SHARED, member.getBank());
 		}
 		else
 		{
@@ -332,7 +364,7 @@ public class GroupBankViewer
 			}
 
 			current.add(entry);
-			if (current.size() == COLUMNS)
+			if (current.size() == columns)
 			{
 				result.add(Row.items(current));
 				current = new ArrayList<>();

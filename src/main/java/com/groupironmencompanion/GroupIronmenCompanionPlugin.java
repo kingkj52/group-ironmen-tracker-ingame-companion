@@ -3,6 +3,7 @@ package com.groupironmencompanion;
 import com.google.inject.Provides;
 import com.groupironmencompanion.api.GroupApi;
 import com.groupironmencompanion.api.MemberDto;
+import com.groupironmencompanion.bank.GameSprites;
 import com.groupironmencompanion.bank.GroupBankInput;
 import com.groupironmencompanion.bank.GroupBankOverlay;
 import com.groupironmencompanion.bank.GroupBankTabOverlay;
@@ -167,6 +168,9 @@ public class GroupIronmenCompanionPlugin extends Plugin
 
 	@Inject
 	private SkillHoverOverlay skillHoverOverlay;
+
+	@Inject
+	private GameSprites gameSprites;
 
 	@Inject
 	private GroupStatusOverlay statusOverlay;
@@ -618,6 +622,8 @@ public class GroupIronmenCompanionPlugin extends Plugin
 		}
 		if (!GroupIronmenCompanionConfig.GROUP.equals(event.getGroup()))
 		{
+			// Turning an interface reskin on, off or to another pack restyles the group bank too.
+			gameSprites.onConfigChanged(event.getGroup(), event.getKey());
 			return;
 		}
 

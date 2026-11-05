@@ -50,6 +50,16 @@ public class GroupState
 	private volatile Color[] palette = new Color[0];
 	private volatile String localPlayerName;
 
+	/**
+	 * Bumped by every {@link #reset}. A poll notes it before its request goes out, so a
+	 * response that was already in flight when the state was reset, for a group that is no
+	 * longer configured, can be recognised and dropped instead of being merged back in.
+	 */
+	private volatile int generation;
+
+	/** Seconds after which a member's interaction no longer counts as current. */
+	private volatile int interactionStaleSeconds = 10;
+
 	public void addListener(Runnable listener)
 	{
 		listeners.add(listener);
@@ -65,13 +75,30 @@ public class GroupState
 		return fromTime.get();
 	}
 
-	public void reset()
+	/** Read before a request is made, and handed back with its response to {@link #applyUpdate}. */
+	public int getGeneration()
 	{
+		return generation;
+	}
+
+	public synchronized void reset()
+	{
+		generation++;
 		members.clear();
 		rebuildMemberList();
 		fromTime.set(EPOCH);
 		fromInstant.set(Instant.EPOCH);
 		fireChanged();
+	}
+
+	/**
+	 * Matches interaction staleness to the refresh rate. An interaction can only be as fresh
+	 * as the last poll, so at a slow refresh rate a fixed 10 seconds hid every one of them
+	 * the moment it arrived. Applies to interactions received from now on.
+	 */
+	public void setPollSeconds(int pollSeconds)
+	{
+		interactionStaleSeconds = Math.max(10, pollSeconds + 5);
 	}
 
 	public void setLocalPlayerName(String name)
@@ -199,14 +226,24 @@ public class GroupState
 	// Writing
 	// ------------------------------------------------------------------
 
-	/**
-	 * Merges one {@code get-group-data} response and advances the poll cursor.
-	 *
-	 * @return true when anything changed and the UI should redraw
-	 */
+	/** Merges a response to a request made under the current generation. */
 	public boolean applyUpdate(MemberDto[] response)
 	{
-		if (response == null)
+		return applyUpdate(response, generation);
+	}
+
+	/**
+	 * Merges one {@code get-group-data} response and advances the poll cursor.
+	 * <p>
+	 * Synchronised with {@link #reset} so a reset cannot land halfway through a merge.
+	 *
+	 * @param requestGeneration {@link #getGeneration} as it was when the request was made; a
+	 *                          response from before the last reset is ignored
+	 * @return true when anything changed and the UI should redraw
+	 */
+	public synchronized boolean applyUpdate(MemberDto[] response, int requestGeneration)
+	{
+		if (response == null || requestGeneration != generation)
 		{
 			return false;
 		}
@@ -231,9 +268,18 @@ public class GroupState
 				membershipChanged = true;
 			}
 			GroupMember member = members.computeIfAbsent(dto.name, GroupMember::new);
-			changed |= merge(member, dto);
-
 			Instant updated = parseInstant(dto.last_updated);
+
+			// from_time is inclusive, so the newest member's latest fields come back on every
+			// poll. Their update time says whether there is anything new: the response that
+			// set it carried every field up to it. Merging the repeat anyway made every poll a
+			// change, and every listener rebuilt the bank, panel and map each refresh.
+			boolean repeat = updated != null && updated.equals(member.getLastUpdated());
+			if (!repeat)
+			{
+				changed |= merge(member, dto);
+			}
+
 			if (updated != null)
 			{
 				member.setLastUpdated(updated);
@@ -350,7 +396,7 @@ public class GroupState
 		return changed;
 	}
 
-	private static GroupMember.Interaction toInteraction(MemberDto.InteractingDto dto)
+	private GroupMember.Interaction toInteraction(MemberDto.InteractingDto dto)
 	{
 		WorldPoint point = null;
 		if (dto.location != null)
@@ -359,7 +405,7 @@ public class GroupState
 		}
 		Instant seen = parseInstant(dto.last_updated);
 		return new GroupMember.Interaction(dto.name, dto.ratio, dto.scale, point,
-			seen != null ? seen : Instant.now());
+			seen != null ? seen : Instant.now(), interactionStaleSeconds);
 	}
 
 	/** Expands the server's flat [id, quantity, ...] encoding. */

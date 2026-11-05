@@ -11,6 +11,7 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import org.junit.Test;
 
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
@@ -83,10 +84,60 @@ public class ComplianceTest
 	public void addsNoMenuEntries() throws IOException
 	{
 		// Jagex prohibit "any addition of new menu entries which cause actions to be sent to
-		// the server". The plugin sidesteps the question entirely by creating none at all.
-		assertAbsent("This plugin must never create a menu entry.",
-			"createMenuEntry", "addMenuEntry", "MenuEntry", "MenuAction", "invokeMenuAction",
-			"setMenuOptions", "getMenuEntries");
+		// the server". The plugin sidesteps the question entirely by creating none at all. The
+		// one place it touches the menu, while the mouse is over the group bank window, only
+		// removes the scene's options so nothing behind the window can be acted on.
+		assertAbsent("This plugin must never create or invoke a menu entry.",
+			"createMenuEntry", "addMenuEntry", "invokeMenuAction", "menuAction(", "setMenuOptions",
+			"setOption(", "setTarget(", "setType(", "onClick(");
+	}
+
+	/**
+	 * The one permitted menu write stays a filter, and stays gated.
+	 * <p>
+	 * {@link #addsNoMenuEntries()} bans creating, configuring and invoking entries, which
+	 * leaves {@code setMenuEntries} as the only way this plugin can touch the menu at all. That
+	 * is deliberate: it cannot add anything, because the array it passes can only hold entries
+	 * the game itself built, and building one needs the banned {@code createMenuEntry}.
+	 * <p>
+	 * What the ban list cannot express is that the call must happen only while the cursor is
+	 * over the plugin's own window. Blanking the menu anywhere else would take the game away
+	 * from the player, which is a far worse failure than the one the filter exists to fix. So
+	 * this pins the call to a single site, and pins that site to the test that gates it.
+	 */
+	@Test
+	public void theOnlyMenuWriteIsGatedOnTheWindow() throws IOException
+	{
+		List<String> sites = new ArrayList<>();
+		for (Path path : sources())
+		{
+			List<String> lines = Files.readAllLines(path, StandardCharsets.UTF_8);
+			for (int i = 0; i < lines.size(); i++)
+			{
+				if (lines.get(i).contains("setMenuEntries"))
+				{
+					String trimmed = lines.get(i).trim();
+					if (trimmed.startsWith("//") || trimmed.startsWith("*"))
+					{
+						continue;
+					}
+					sites.add(SOURCE_ROOT.relativize(path) + ":" + (i + 1));
+
+					// The guard must be visible in the same method, and the method is short.
+					String window = String.join("\n",
+						lines.subList(Math.max(0, i - 40), i));
+					assertTrue("the menu write at " + SOURCE_ROOT.relativize(path) + ":" + (i + 1)
+							+ " must be reached only while the cursor is over the plugin's window",
+						window.contains("covers("));
+					assertTrue("the menu write at " + SOURCE_ROOT.relativize(path) + ":" + (i + 1)
+							+ " must leave an already-open menu alone",
+						window.contains("isMenuOpen()"));
+				}
+			}
+		}
+
+		assertEquals("exactly one place may write the menu, so there is one place to audit",
+			1, sites.size());
 	}
 
 	@Test

@@ -10,11 +10,13 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.function.IntToLongFunction;
 import javax.annotation.Nullable;
 import javax.inject.Inject;
 import javax.inject.Singleton;
 import lombok.Getter;
 import lombok.Setter;
+import net.runelite.api.gameval.ItemID;
 import net.runelite.client.game.ItemManager;
 
 /**
@@ -71,8 +73,13 @@ public class GroupBankViewer
 	@Getter
 	private int visibleItemCount;
 
+	/** The shown stacks' high alchemy value, before nature runes, with coins at face value. */
 	@Getter
 	private long visibleValue;
+
+	/** What alching the shown stacks would make, counting only stacks that alch at a profit. */
+	@Getter
+	private long visibleProfit;
 
 	// ------------------------------------------------------------------
 	// Window state
@@ -83,7 +90,8 @@ public class GroupBankViewer
 		if (this.open != open)
 		{
 			this.open = open;
-			this.searchFocused = open && !filter.isEmpty();
+			// Focus means the search prompt is open, and opening the window does not open it.
+			this.searchFocused = false;
 			markDirty();
 		}
 	}
@@ -177,18 +185,23 @@ public class GroupBankViewer
 
 		int count = 0;
 		long value = 0;
+		long profit = 0;
 		for (Entry entry : entries)
 		{
 			if (!entry.header)
 			{
 				count++;
-				value += alchProfit(entry.itemId) * entry.quantity;
+				value += stackValue(entry.itemId, alchValue(entry.itemId), entry.quantity);
+				profit += stackProfit(entry.itemId, alchProfit(entry.itemId), entry.quantity);
 			}
 		}
 		visibleItemCount = count;
 		visibleValue = value;
+		visibleProfit = profit;
 
-		int maxScroll = Math.max(0, rows.size() - 1);
+		// The same limit the wheel and the scrollbar use. Clamping to the last row instead left
+		// a shrunk list scrolled to a nearly empty page with the thumb off the end of its track.
+		int maxScroll = Math.max(0, rows.size() - GroupBankOverlay.VISIBLE_ROWS);
 		if (scrollRow > maxScroll)
 		{
 			scrollRow = maxScroll;
@@ -210,15 +223,44 @@ public class GroupBankViewer
 			}
 		}
 
+		sortByValue(entries, this::alchValue);
+		return entries;
+	}
+
+	/** Sorts stacks most valuable first, by {@link #stackValue}. */
+	static void sortByValue(List<Entry> entries, IntToLongFunction alchEach)
+	{
 		// Value is looked up once per entry rather than on every comparison; a whole group's
 		// bank can run to thousands of stacks.
 		Map<Integer, Long> values = new HashMap<>(entries.size());
 		for (Entry entry : entries)
 		{
-			values.put(entry.itemId, alchProfit(entry.itemId) * entry.quantity);
+			values.put(entry.itemId, stackValue(entry.itemId, alchEach.applyAsLong(entry.itemId), entry.quantity));
 		}
 		entries.sort(Comparator.comparingLong((Entry e) -> values.getOrDefault(e.itemId, 0L)).reversed());
-		return entries;
+	}
+
+	/**
+	 * What a stack is worth, for sorting the All tab and for the footer's value: its high
+	 * alchemy value before nature runes, with coins at face value since they alch for nothing
+	 * but are plainly worth their amount.
+	 * <p>
+	 * Sorting by alch profit instead, as this once did, sank coins, runes and every big cheap
+	 * stack below a single log, because each counted as a large loss.
+	 */
+	static long stackValue(int itemId, long alchEach, long quantity)
+	{
+		return itemId == ItemID.COINS ? quantity : alchEach * quantity;
+	}
+
+	/**
+	 * What alching a stack would make after nature runes. A stack that would lose money counts
+	 * as nothing rather than as a loss, since nobody alchs at a loss, and coins make nothing.
+	 * The tooltip still shows a single item's loss.
+	 */
+	static long stackProfit(int itemId, long profitEach, long quantity)
+	{
+		return itemId == ItemID.COINS ? 0 : Math.max(0, profitEach) * quantity;
 	}
 
 	/** One member's holdings, split into the containers they came from. */

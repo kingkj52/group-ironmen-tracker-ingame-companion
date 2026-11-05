@@ -25,7 +25,9 @@ import net.runelite.api.Player;
 import net.runelite.api.Quest;
 import net.runelite.api.QuestState;
 import net.runelite.api.Skill;
+import net.runelite.api.WorldEntity;
 import net.runelite.api.WorldType;
+import net.runelite.api.WorldView;
 import net.runelite.api.coords.WorldPoint;
 import net.runelite.api.gameval.InventoryID;
 import net.runelite.api.gameval.VarbitID;
@@ -46,6 +48,16 @@ public class GroupUploader
 {
 	/** Interface group of the group storage loading screen, used to detect a committed save. */
 	private static final int GROUP_STORAGE_LOADER = 293;
+
+	/**
+	 * Least time between quest scans. A scan asks the game for the state of every quest, a
+	 * script run each, so it is not repeated on every tick that vars change. The official
+	 * tracker scans on the same interval.
+	 */
+	private static final long QUEST_SCAN_MILLIS = 60_000;
+
+	/** How long to wait after a failed check or post before trying again. */
+	private static final long BACKOFF_MILLIS = 10_000;
 
 	private static final int INVENTORY_SIZE = 28;
 	private static final int EQUIPMENT_SIZE = 14;
@@ -76,10 +88,12 @@ public class GroupUploader
 	private final Map<String, String> lastSent = new ConcurrentHashMap<>();
 
 	private int[] sortedQuestIds;
+	private boolean questsChanged = true;
+	private long lastQuestScan;
 	private int[] pendingSharedBank;
 	private boolean membershipConfirmed;
 	private String membershipCheckedFor;
-	private int backoffTicks;
+	private volatile long backoffUntil;
 
 	@Getter
 	private volatile boolean active;
@@ -95,9 +109,12 @@ public class GroupUploader
 		}
 		lastSent.clear();
 		pendingSharedBank = null;
+		// Scan quests on the next tick, such as the first after a login, then at most once a minute.
+		questsChanged = true;
+		lastQuestScan = 0;
 		membershipConfirmed = false;
 		membershipCheckedFor = null;
-		backoffTicks = 0;
+		backoffUntil = 0;
 		active = false;
 		status = "Idle";
 	}
@@ -155,12 +172,24 @@ public class GroupUploader
 			return;
 		}
 		Player local = client.getLocalPlayer();
-		WorldPoint point = WorldPoint.fromLocalInstance(client, local.getLocalLocation());
+		WorldPoint point = realLocation(local);
 		if (point == null)
 		{
 			return;
 		}
-		stage("coordinates", new int[]{point.getX(), point.getY(), point.getPlane(), 0});
+		stage("coordinates", UploadPayloads.coordinates(point, isOnBoat(local)));
+	}
+
+	/**
+	 * Stages skills, inventory and equipment as they are now. Used after a login or hop: the
+	 * reset that follows a character change throws away whatever the login burst staged, and
+	 * these fields would otherwise stay missing until they next change.
+	 */
+	public void snapshot()
+	{
+		onSkillsChanged();
+		onItemContainerChanged(InventoryID.INV, client.getItemContainer(InventoryID.INV));
+		onItemContainerChanged(InventoryID.WORN, client.getItemContainer(InventoryID.WORN));
 	}
 
 	public void onItemContainerChanged(int containerId, @Nullable ItemContainer container)
@@ -217,14 +246,25 @@ public class GroupUploader
 
 		stageRunePouch();
 		stageInteracting();
+		stageQuests();
 	}
 
+	/** Notes that quest progress may have changed. The scan itself runs from {@link #onGameTick}. */
 	public void onQuestsChanged()
 	{
-		if (!collectable())
+		questsChanged = true;
+	}
+
+	private void stageQuests()
+	{
+		long now = System.currentTimeMillis();
+		if (!questsChanged || (lastQuestScan != 0 && now - lastQuestScan < QUEST_SCAN_MILLIS))
 		{
 			return;
 		}
+		questsChanged = false;
+		lastQuestScan = now;
+
 		if (sortedQuestIds == null)
 		{
 			sortedQuestIds = Arrays.stream(Quest.values())
@@ -302,7 +342,7 @@ public class GroupUploader
 			return;
 		}
 
-		WorldPoint point = WorldPoint.fromLocalInstance(client, target.getLocalLocation());
+		WorldPoint point = realLocation(target);
 		UploadPayloads.Coordinates location = point == null
 			? new UploadPayloads.Coordinates(0, 0, 0)
 			: new UploadPayloads.Coordinates(point.getX(), point.getY(), point.getPlane());
@@ -321,27 +361,71 @@ public class GroupUploader
 	// ------------------------------------------------------------------
 
 	/** Posts everything staged since the last call. Must not run on the client thread. */
+	/**
+	 * Drops what is staged and what was last sent, and nothing else. Safe from the polling
+	 * thread: the rest of {@link #reset} is client thread state, such as a group storage
+	 * save in progress, which must not be cleared from under it every poll.
+	 */
+	private void discardStaged()
+	{
+		synchronized (pending)
+		{
+			pending.clear();
+		}
+		lastSent.clear();
+		membershipConfirmed = false;
+		active = false;
+	}
+
 	public void flush(String playerName)
 	{
-		if (playerName == null || !shouldUpload())
+		if (!shouldUpload())
+		{
+			// Nothing new is staged while the tracker uploads, but what was staged before it
+			// took over is stale, and the tracker may since have posted values that lastSent
+			// would wrongly suppress. Start clean whenever this plugin takes over again.
+			discardStaged();
+			return;
+		}
+		if (playerName == null)
 		{
 			active = false;
 			return;
 		}
 
-		if (backoffTicks > 0)
+		// Timed rather than counted in flushes, which happen once per refresh interval, so
+		// the wait no longer stretches from seconds to minutes as that interval grows.
+		if (System.currentTimeMillis() < backoffUntil)
 		{
-			backoffTicks--;
 			return;
 		}
 
 		if (!membershipConfirmed || !playerName.equals(membershipCheckedFor))
 		{
-			if (!api.isPlayerInGroup(playerName))
+			Boolean member;
+			try
+			{
+				member = api.isPlayerInGroup(playerName);
+			}
+			catch (GroupApi.NotAuthorisedException e)
+			{
+				status = "The server rejected the group token";
+				active = false;
+				backOff();
+				return;
+			}
+			if (member == null)
+			{
+				status = "Could not reach the server, retrying shortly";
+				active = false;
+				backOff();
+				return;
+			}
+			if (!member)
 			{
 				status = "This character is not a member of the configured group";
 				active = false;
-				backoffTicks = 10;
+				backOff();
 				return;
 			}
 			membershipConfirmed = true;
@@ -372,7 +456,7 @@ public class GroupUploader
 			{
 				// Put the fields back so nothing is lost, without clobbering newer values.
 				restore(payload);
-				backoffTicks = 10;
+				backOff();
 			}
 		}
 		catch (GroupApi.NotAuthorisedException e)
@@ -380,8 +464,13 @@ public class GroupUploader
 			membershipConfirmed = false;
 			status = "The server rejected the group token";
 			active = false;
-			backoffTicks = 10;
+			backOff();
 		}
+	}
+
+	private void backOff()
+	{
+		backoffUntil = System.currentTimeMillis() + BACKOFF_MILLIS;
 	}
 
 	private void restore(Map<String, Object> payload)
@@ -403,6 +492,32 @@ public class GroupUploader
 	// ------------------------------------------------------------------
 	// Helpers
 	// ------------------------------------------------------------------
+
+	/** True while the actor stands on a boat, which has a world view of its own. */
+	private static boolean isOnBoat(Actor actor)
+	{
+		WorldView view = actor.getWorldView();
+		return view != null && !view.isTopLevel();
+	}
+
+	/**
+	 * Where an actor is in the real world.
+	 * <p>
+	 * A boat is its own world view, built from a template somewhere else in the world, so
+	 * converting a position on deck gives a tile nowhere near the sea. While aboard, the
+	 * boat's own position in the top-level world is the real one. This is the same
+	 * conversion the official tracker plugin makes.
+	 */
+	@Nullable
+	private WorldPoint realLocation(Actor actor)
+	{
+		if (!isOnBoat(actor))
+		{
+			return WorldPoint.fromLocalInstance(client, actor.getLocalLocation());
+		}
+		WorldEntity boat = client.getTopLevelWorldView().worldEntities().byIndex(actor.getWorldView().getId());
+		return boat == null ? null : WorldPoint.fromLocalInstance(client, boat.getLocalLocation());
+	}
 
 	private boolean collectable()
 	{

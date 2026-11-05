@@ -4,7 +4,7 @@ Regenerates `src/main/resources/com/groupironmencompanion/map-areas.json`, the d
 world map's dungeon-entrance markers.
 
 Nothing in that file is hand-measured. It comes from the game's own world map definitions
-and the map's intermap links — the jumps the world map performs when you click through from
+and the map's intermap links, which are the jumps the world map performs when you click through from
 the surface into a dungeon view and back.
 
 ## Regenerating after a game update
@@ -75,8 +75,3 @@ open:
 ```bash
 ./gradlew locProbe --args="$HOME/.runelite/jagexcache/oldschool/LIVE"
 ```
-
-Both do, with no XTEA keys — 480 objects in the Guardians of the Rift region, 7,079 in
-Varrock. This is recorded because the opposite was assumed once and written into a comment in
-`MapAreas`: that an area's entrance could not be found because placements were encrypted. They
-are not, so object data is available for working out where a detached area is entered from.

@@ -19,13 +19,12 @@ Every feature below can be switched off on its own in the plugin settings.
 `Ctrl+G` by default, or click the **Group** tab (a bank tab with the group ironman helmet)
 that appears beside your bank.
 
-It's drawn with the bank's own sprites and fonts, so it matches the real bank beside it.
+**New** It's drawn with the bank's own sprites and fonts, so it matches the real bank beside it.
 
 The first time you open it, it places itself to the right of the bank, just below the Group
 tab. If it does not fit there it goes to the left of the bank, or against the left edge of
 the screen when the bank is too wide to sit beside (which it always is in fixed mode). After
-that, alt-drag it wherever you like: RuneLite remembers the position and the plugin never
-moves it again.
+that, alt-drag it wherever you like: the position is remembered.
 
 It only swallows clicks inside its own frame, so your own bank stays fully usable beside it.
 
@@ -33,19 +32,17 @@ It only swallows clicks inside its own frame, so your own bank stays fully usabl
   breakdown of who is holding it.
 - A tab per member, split into Bank / Inventory / Equipment / Rune pouch / Seed vault /
   Quiver, plus a **Group Storage** tab.
-- Member tabs show the group ironman helmet in that member's map colour, with their name
+- **New** Member tabs show the group ironman helmet in that member's map colour, with their name
   underneath.
 - Click the search box and type to filter. `Esc` clears, then closes.
 - Alt-drag to move it, like any RuneLite overlay.
-- Drag an edge or corner to resize it (no Alt needed). The size is remembered with the
+- **New** Drag an edge or corner to resize it (no Alt needed). The size is remembered with the
   position.
-- Follows Resource Packs and Interface Styles reskins. The map list, skills panel and
+- **New** Follows Resource Packs and Interface Styles reskins. The map list, skills panel and
   tooltips use RuneLite's overlay colour.
 
 **Group levels on the Skills tab** - hover any skill and a panel lists every member's level,
-experience and experience to the next level, each in that member's colour. The panel is
-anchored beside the Skills tab rather than following the mouse, so it never covers the game's
-own experience tooltip and never runs off the edge of the screen. Its side is configurable.
+experience and experience to the next level, each in that member's colour. Its placement is configurable.
 
 **World map markers** - a coloured pin per member on the world map. When a member is off the
 overworld, a second hollow marker with a downward chevron is drawn at the surface entrance
@@ -58,13 +55,12 @@ entrance rather than sliding around as they walk about underground.
 
 Opening the world map also shows a small list of online members: click one to jump the map to
 them, or right-click to route to them with the Shortest Path plugin. The route follows them as
-they move and clears once you reach them. Shortest Path is optional; without it, right-click
-simply does nothing.
+they move and clears once you reach them.
 
 Entrances cover every area the game defines a map for - around 40, including the ones that
 are not simply "the surface plus 6400", such as Zanaris, God Wars Dungeon, Mor Ul Rek and the
 Stronghold of Security. The data is generated from the game cache rather than measured by
-hand; see [tools/mapdump](tools/mapdump/README.md).
+hand or pulled from online sources; see [tools/mapdump](tools/mapdump/README.md).
 
 **Side panel** - five tabs:
 
@@ -76,12 +72,12 @@ hand; see [tools/mapdump](tools/mapdump/README.md).
 - **Diaries** - achievement diary completion per member, overall or broken down by region
   and tier.
 
-**Status overlay** (off by default) - the group at a glance in the game's own fonts: each
+**Status overlay** ***Newly Updated*** (off by default) - the group at a glance in the game's own fonts: each
 member's name and world, hitpoints, prayer and run energy bars, and a line saying what they
 seem to be doing. Offline members get one grey line with when they were last seen. Alt-drag
 to move it, alt-drag its edge to change the width.
 
-**What members are doing** - a guess, shown in the status overlay and side panel, like
+**What members are doing** **New** - a guess, shown in the status overlay and side panel, like
 "Fishing at Catherby", "Fighting Goblin (43%)" or "Idle at Lumbridge (3m)".
 
 It can be wrong. The tracker doesn't share an activity, so it's worked out from what
@@ -91,30 +87,27 @@ interacting with. Some limits:
 - Woodcutting, mining and similar only show once the XP arrives, since trees and rocks
   aren't an interaction.
 - A quest only shows as in progress if it started while you were watching.
-- Standing still looks the same as logged out until the offline threshold passes.
+- Standing still may look the same as logged out once the offline threshold passes.
 - An unusual instance may show a nearby place name instead of its own.
 
-Places come from region names and the world map's own labels (see Credits), so new areas are
+Places come from region names and the world map's own labels (see Credits), so new areas should be
 named without a plugin update.
 
-**Members in the world** - off by default, and the one feature that draws in the game scene.
-Group members standing close enough to be on screen are drawn as translucent blue figures,
-wearing the gear they actually have equipped, even though they are on another world. The point
-is farming or skilling the same spot on separate worlds and still seeing company.
+**Members in the world** **New** - off by default, the only feature that draws in the game scene.
+Group members standing close enough to be on screen but on different worlds are drawn as translucent
+blue figures, wearing the gear they actually have equipped, even though they are on another world.
+The point is farming or skilling the same spot on separate worlds and still enjoying company.
 
 They are this plugin's own drawing and nothing more: absent from the player and NPC lists,
 impossible to click or target, and unknown to the server. A member on *your* world is left to
-the game to draw, so you never see a ghost standing inside a real player. Hovering one names
-it in a small panel beside the cursor, which is a label, not a menu.
+the game to draw, and hovering one names it in a small label panel beside the cursor.
 
 A figure acts out the same guess the status overlay shows (see below), so the two always
 agree: fighting, chopping, mining, fishing, farming and so on. Someone who moves mid-fight
 keeps their opponent beside them. Updates come about once a second, so figures lag a little
 and short actions are approximate.
 
-**Never drawn in the Wilderness or on any PvP world, and that cannot be switched off.** A
-figure that cannot be clicked is harmless beside a farming patch and dangerous somewhere that
-reacting correctly to shapes on screen is the whole activity.
+**Never drawn in the Wilderness or on any PvP world, and that cannot be switched off.**
 
 ## Setup
 
@@ -141,7 +134,8 @@ have anything to show.
 - If it is not, this plugin uploads the same fields in the same format, so the website keeps
   working either way. Collection log progress is the one thing it does not collect; install
   the tracker plugin if your group wants that.
-- Set **Data sharing → Share my data** to `OFF` to never upload anything.
+- Set **Data sharing → Share my data** to `OFF` to never upload anything. With this `OFF` and the
+  official plugin not running, nothing will work as it can't sync to the website.
 
 ## Settings
 
@@ -206,8 +200,7 @@ clients are pointed at it is not something this code gets to assume.
 - Requests carry the delta cursor the API provides, so a poll that finds nothing new returns
   nothing new.
 - The refresh interval is capped at one second and defaults to three.
-- **While nobody is logged in, polling backs off to once every thirty seconds.** A client left
-  sitting on the login screen used to keep asking at the full rate indefinitely. The side panel
+- **While nobody is logged in, polling backs off to once every thirty seconds.** The side panel
   still updates, which is the reason not to stop altogether; logging in takes effect at once
   rather than waiting the backoff out. `PollRateTest` pins the rule.
 

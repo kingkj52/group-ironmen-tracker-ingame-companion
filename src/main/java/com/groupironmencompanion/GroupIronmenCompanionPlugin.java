@@ -95,6 +95,9 @@ public class GroupIronmenCompanionPlugin extends Plugin
 	/** Game ticks between periodic world map marker rebuilds, about six seconds. */
 	private static final int MAP_REFRESH_TICKS = 10;
 
+	/** Least time between requests while nobody is logged in. See {@link #pollIntervalMillis}. */
+	private static final long IDLE_POLL_MILLIS = 30_000;
+
 
 	@Inject
 	private Client client;
@@ -299,12 +302,36 @@ public class GroupIronmenCompanionPlugin extends Plugin
 	// ------------------------------------------------------------------
 
 	/** Runs off the client thread once a second, and fetches at the configured interval. */
+	/**
+	 * How long to leave between requests, given the configured rate and whether anyone is
+	 * actually playing.
+	 * <p>
+	 * The plugin used to poll at the configured rate whenever it had credentials, logged in or
+	 * not, so a client left sitting on the login screen asked the group server for updates
+	 * every three seconds indefinitely. One person doing that is nothing. The server is a
+	 * free service run by one person, and this plugin is on the hub, so the number of clients
+	 * doing it is not ours to assume: a thousand idle clients at the default rate is well over
+	 * three hundred requests a second for data nobody is looking at.
+	 * <p>
+	 * Backing off rather than stopping, because checking what the group is up to before
+	 * logging in is a real thing to want, and the side panel is on screen at the login screen.
+	 * Half a minute is plenty for reading a panel and still an order of magnitude less traffic.
+	 * <p>
+	 * Logging in does not wait this out. The interval is compared against the last request, so
+	 * the first poll after the state flips is already due.
+	 */
+	static long pollIntervalMillis(int pollSeconds, boolean loggedIn)
+	{
+		long configured = Math.max(1, pollSeconds) * 1000L;
+		return loggedIn ? configured : Math.max(configured, IDLE_POLL_MILLIS);
+	}
+
 	private void poll()
 	{
 		try
 		{
 			long now = System.currentTimeMillis();
-			if (now - lastPollMillis < config.pollSeconds() * 1000L)
+			if (now - lastPollMillis < pollIntervalMillis(config.pollSeconds(), inputState.isLoggedIn()))
 			{
 				return;
 			}

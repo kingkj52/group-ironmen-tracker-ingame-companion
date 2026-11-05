@@ -163,6 +163,23 @@ bar, so this plugin is built to stay clearly inside
 Each of those is enforced by `ComplianceTest`, which greps the source tree on every build, so
 none of them can regress quietly.
 
+## Load on the server
+
+groupiron.men is a free service run by one person, and this plugin is on the hub, so how many
+clients are pointed at it is not something this code gets to assume.
+
+- One host is contacted, ever: the one under Connection. There are no wiki lookups, no price
+  APIs, no telemetry. `ComplianceTest` fails the build if a second URL appears in the source.
+- Requests carry the delta cursor the API provides, so a poll that finds nothing new returns
+  nothing new.
+- The refresh interval is capped at one second and defaults to three.
+- **While nobody is logged in, polling backs off to once every thirty seconds.** A client left
+  sitting on the login screen used to keep asking at the full rate indefinitely. The side panel
+  still updates, which is the reason not to stop altogether; logging in takes effect at once
+  rather than waiting the backoff out. `PollRateTest` pins the rule.
+
+If you self-host, none of this reaches groupiron.men at all.
+
 ## Security
 
 - The only host the plugin contacts is the base URL you configured - `groupiron.men` by
